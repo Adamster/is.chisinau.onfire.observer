@@ -60,7 +60,17 @@ public sealed class RssPollingServiceTests
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
-        public Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken) =>
+        public Task AnswerCallbackAsync(
+            string callbackQueryId,
+            string message,
+            bool showAlert,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task RemoveInlineKeyboardAsync(long chatId, int messageId, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task UpdateMessageTextAsync(long chatId, int messageId, string message, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 }
