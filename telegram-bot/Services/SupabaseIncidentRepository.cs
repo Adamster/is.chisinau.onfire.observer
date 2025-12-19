@@ -8,13 +8,18 @@ namespace TelegramBot.Services;
 public sealed class SupabaseIncidentRepository : IIncidentRepository
 {
     private readonly IOptionsMonitor<SupabaseOptions> _options;
+    private readonly IArticleDetailsFetcher _articleDetailsFetcher;
     private readonly ILogger<SupabaseIncidentRepository> _logger;
     private readonly SemaphoreSlim _initLock = new(1, 1);
     private Client? _client;
 
-    public SupabaseIncidentRepository(IOptionsMonitor<SupabaseOptions> options, ILogger<SupabaseIncidentRepository> logger)
+    public SupabaseIncidentRepository(
+        IOptionsMonitor<SupabaseOptions> options,
+        IArticleDetailsFetcher articleDetailsFetcher,
+        ILogger<SupabaseIncidentRepository> logger)
     {
         _options = options;
+        _articleDetailsFetcher = articleDetailsFetcher;
         _logger = logger;
     }
 
@@ -27,8 +32,9 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         }
 
         var when = candidate.PublishedAt ?? DateTimeOffset.UtcNow;
-        var photoUrl = ResolvePhotoUrl(candidate);
-        var street = ResolveStreet(candidate);
+        var details = await _articleDetailsFetcher.FetchAsync(candidate, cancellationToken);
+        var photoUrl = ResolvePhotoUrl(candidate, details);
+        var street = ResolveStreet(candidate, details);
 
         var client = await GetClientAsync(url, key, cancellationToken);
         var payload = new FireIncident
@@ -42,21 +48,31 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         _logger.LogInformation("Inserted incident row for {CandidateId}.", candidate.Id);
     }
 
-    private string ResolvePhotoUrl(RssItemCandidate candidate)
+    private string ResolvePhotoUrl(RssItemCandidate candidate, ArticleDetails details)
     {
         if (!string.IsNullOrWhiteSpace(_options.CurrentValue.DefaultPhotoUrl))
         {
             return _options.CurrentValue.DefaultPhotoUrl!;
         }
 
+        if (!string.IsNullOrWhiteSpace(details.PhotoUrl))
+        {
+            return details.PhotoUrl!;
+        }
+
         return string.IsNullOrWhiteSpace(candidate.Link) ? "" : candidate.Link;
     }
 
-    private string ResolveStreet(RssItemCandidate candidate)
+    private string ResolveStreet(RssItemCandidate candidate, ArticleDetails details)
     {
         if (!string.IsNullOrWhiteSpace(_options.CurrentValue.DefaultStreet))
         {
             return _options.CurrentValue.DefaultStreet!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(details.Street))
+        {
+            return details.Street!;
         }
 
         return string.IsNullOrWhiteSpace(candidate.Title) ? "(unknown)" : candidate.Title;
