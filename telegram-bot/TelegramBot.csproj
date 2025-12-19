@@ -7,6 +7,6 @@
 
   <ItemGroup>
     <PackageReference Include="System.ServiceModel.Syndication" Version="8.0.0" />
-    <PackageReference Include="Npgsql" Version="8.0.5" />
+    <PackageReference Include="Supabase" Version="2.5.3" />
   </ItemGroup>
 </Project>

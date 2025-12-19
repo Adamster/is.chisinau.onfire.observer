@@ -39,7 +39,8 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
         telegram = new { telegram.Value.Enabled, telegram.Value.ChatId },
         supabase = new
         {
-            supabase.Value.ConnectionString is not null,
+            supabase.Value.Url is not null,
+            supabase.Value.ServiceRoleKey is not null,
             supabase.Value.DefaultPhotoUrl,
             supabase.Value.DefaultStreet
         },
@@ -82,7 +83,9 @@ public sealed class SupabaseOptions
 {
     public const string SectionName = "Supabase";
 
-    public string? ConnectionString { get; init; }
+    public string? Url { get; init; }
+
+    public string? ServiceRoleKey { get; init; }
 
     public string? DefaultPhotoUrl { get; init; }
 

@@ -18,7 +18,8 @@ public sealed class ApprovalProcessingServiceTests
         var repository = new StubIncidentRepository();
         var options = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions
         {
-            ConnectionString = "postgresql://example",
+            Url = "https://example.supabase.co",
+            ServiceRoleKey = "service-role-key",
             PollIntervalSeconds = 30
         });
 

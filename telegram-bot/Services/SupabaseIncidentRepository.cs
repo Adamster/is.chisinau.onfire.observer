@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using Npgsql;
+using Supabase;
 using TelegramBot.Models;
 
 namespace TelegramBot.Services;
@@ -8,6 +8,8 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
 {
     private readonly IOptionsMonitor<SupabaseOptions> _options;
     private readonly ILogger<SupabaseIncidentRepository> _logger;
+    private readonly SemaphoreSlim _initLock = new(1, 1);
+    private Client? _client;
 
     public SupabaseIncidentRepository(IOptionsMonitor<SupabaseOptions> options, ILogger<SupabaseIncidentRepository> logger)
     {
@@ -17,32 +19,28 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
 
     public async Task AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
     {
-        var connectionString = _options.CurrentValue.ConnectionString;
-        if (string.IsNullOrWhiteSpace(connectionString))
+        var url = _options.CurrentValue.Url;
+        var key = _options.CurrentValue.ServiceRoleKey;
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))
         {
-            _logger.LogWarning("Supabase connection string is not configured.");
+            _logger.LogWarning("Supabase URL or service role key is not configured.");
             return;
         }
-
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(cancellationToken);
-
-        var command = connection.CreateCommand();
-        command.CommandText = """
-            insert into public.fire_incidents (datetime, photo_url, street)
-            values (@datetime, @photo_url, @street);
-            """;
 
         var when = candidate.PublishedAt ?? DateTimeOffset.UtcNow;
         var photoUrl = ResolvePhotoUrl(candidate);
         var street = ResolveStreet(candidate);
 
-        command.Parameters.AddWithValue("datetime", when.UtcDateTime);
-        command.Parameters.AddWithValue("photo_url", photoUrl);
-        command.Parameters.AddWithValue("street", street);
+        var client = await GetClientAsync(url, key, cancellationToken);
+        var payload = new FireIncident
+        {
+            Datetime = when.UtcDateTime,
+            PhotoUrl = photoUrl,
+            Street = street
+        };
 
-        var rows = await command.ExecuteNonQueryAsync(cancellationToken);
-        _logger.LogInformation("Inserted {Rows} incident rows for {CandidateId}.", rows, candidate.Id);
+        await client.From<FireIncident>().Insert(payload, cancellationToken: cancellationToken);
+        _logger.LogInformation("Inserted incident row for {CandidateId}.", candidate.Id);
     }
 
     private string ResolvePhotoUrl(RssItemCandidate candidate)
@@ -63,5 +61,36 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         }
 
         return string.IsNullOrWhiteSpace(candidate.Title) ? "(unknown)" : candidate.Title;
+    }
+
+    private async Task<Client> GetClientAsync(string url, string key, CancellationToken cancellationToken)
+    {
+        if (_client is not null)
+        {
+            return _client;
+        }
+
+        await _initLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_client is null)
+            {
+                var options = new SupabaseOptions
+                {
+                    AutoConnectRealtime = false,
+                    AutoRefreshToken = false
+                };
+
+                var client = new Client(url, key, options);
+                await client.InitializeAsync();
+                _client = client;
+            }
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+
+        return _client!;
     }
 }
