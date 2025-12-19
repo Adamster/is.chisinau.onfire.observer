@@ -75,7 +75,7 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         {
             if (_client is null)
             {
-                var options = new SupabaseOptions
+                var options = new Supabase.SupabaseOptions
                 {
                     AutoConnectRealtime = false,
                     AutoRefreshToken = false
