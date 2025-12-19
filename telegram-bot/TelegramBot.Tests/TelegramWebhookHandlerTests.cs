@@ -13,12 +13,21 @@ public sealed class TelegramWebhookHandlerTests
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
 
+        var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "123"
         });
+        var rssOptions = new TestOptionsMonitor<RssOptions>(new RssOptions());
+        var supabaseOptions = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions());
 
-        var handler = new TelegramWebhookHandler(store, options, NullLogger<TelegramWebhookHandler>.Instance);
+        var handler = new TelegramWebhookHandler(
+            store,
+            notifier,
+            options,
+            rssOptions,
+            supabaseOptions,
+            NullLogger<TelegramWebhookHandler>.Instance);
         var update = new TelegramUpdate
         {
             UpdateId = 1,
@@ -48,12 +57,21 @@ public sealed class TelegramWebhookHandlerTests
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
 
+        var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "999"
         });
+        var rssOptions = new TestOptionsMonitor<RssOptions>(new RssOptions());
+        var supabaseOptions = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions());
 
-        var handler = new TelegramWebhookHandler(store, options, NullLogger<TelegramWebhookHandler>.Instance);
+        var handler = new TelegramWebhookHandler(
+            store,
+            notifier,
+            options,
+            rssOptions,
+            supabaseOptions,
+            NullLogger<TelegramWebhookHandler>.Instance);
         var update = new TelegramUpdate
         {
             UpdateId = 1,
@@ -75,5 +93,14 @@ public sealed class TelegramWebhookHandlerTests
 
         Assert.False(handled);
         Assert.Equal(ApprovalDecision.Pending, store.GetAll().Single().Decision);
+    }
+
+    private sealed class StubTelegramNotifier : ITelegramNotifier
+    {
+        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
+
+        public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
     }
 }
