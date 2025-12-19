@@ -6,21 +6,35 @@ namespace TelegramBot.Services;
 public sealed class TelegramWebhookHandler
 {
     private readonly IncidentCandidateStore _store;
+    private readonly ITelegramNotifier _notifier;
     private readonly IOptionsMonitor<TelegramBotOptions> _options;
+    private readonly IOptionsMonitor<RssOptions> _rssOptions;
+    private readonly IOptionsMonitor<SupabaseOptions> _supabaseOptions;
     private readonly ILogger<TelegramWebhookHandler> _logger;
 
     public TelegramWebhookHandler(
         IncidentCandidateStore store,
+        ITelegramNotifier notifier,
         IOptionsMonitor<TelegramBotOptions> options,
+        IOptionsMonitor<RssOptions> rssOptions,
+        IOptionsMonitor<SupabaseOptions> supabaseOptions,
         ILogger<TelegramWebhookHandler> logger)
     {
         _store = store;
+        _notifier = notifier;
         _options = options;
+        _rssOptions = rssOptions;
+        _supabaseOptions = supabaseOptions;
         _logger = logger;
     }
 
     public bool HandleUpdate(TelegramUpdate update)
     {
+        if (TryHandleStart(update))
+        {
+            return true;
+        }
+
         var callback = update.CallbackQuery;
         if (callback?.Data is null)
         {
@@ -51,6 +65,54 @@ public sealed class TelegramWebhookHandler
 
         _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
         return true;
+    }
+
+    private bool TryHandleStart(TelegramUpdate update)
+    {
+        var message = update.Message;
+        if (message?.Text is null)
+        {
+            return false;
+        }
+
+        if (!message.Text.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!IsAuthorized(message.Chat?.Id))
+        {
+            _logger.LogWarning("Ignoring /start from unauthorized chat.");
+            return false;
+        }
+
+        var config = _options.CurrentValue;
+        if (!config.Enabled)
+        {
+            _logger.LogInformation("Ignoring /start because Telegram is disabled.");
+            return false;
+        }
+
+        var response = BuildConfigurationMessage();
+        _ = _notifier.SendMessageAsync(message.Chat?.Id.ToString() ?? "", response, CancellationToken.None);
+        return true;
+    }
+
+    private string BuildConfigurationMessage()
+    {
+        var rss = _rssOptions.CurrentValue;
+        var supabase = _supabaseOptions.CurrentValue;
+        var hasSupabase = !string.IsNullOrWhiteSpace(supabase.ConnectionString) ||
+                          (!string.IsNullOrWhiteSpace(supabase.Url) && !string.IsNullOrWhiteSpace(supabase.ServiceRoleKey));
+
+        return string.Join(Environment.NewLine, new[]
+        {
+            "Configuration",
+            $"RSS feed: {rss.FeedUrl ?? "(not set)"}",
+            $"RSS poll interval: {rss.PollIntervalSeconds}s",
+            $"RSS keywords: {rss.Keywords.Count}",
+            $"Supabase configured: {(hasSupabase ? "yes" : "no")}"
+        });
     }
 
     private bool IsAuthorized(long? chatId)

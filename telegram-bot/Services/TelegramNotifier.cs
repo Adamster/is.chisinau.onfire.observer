@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
@@ -34,7 +35,6 @@ public sealed class TelegramNotifier : ITelegramNotifier
 
         var payload = new
         {
-            chat_id = config.ChatId,
             text = BuildMessage(candidate),
             parse_mode = "HTML",
             reply_markup = new
@@ -50,7 +50,50 @@ public sealed class TelegramNotifier : ITelegramNotifier
             }
         };
 
-        using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        return await SendMessageAsync(config.ChatId, payload, cancellationToken);
+    }
+
+    public async Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        var payload = new
+        {
+            text = Escape(message),
+            parse_mode = "HTML"
+        };
+
+        return await SendMessageAsync(chatId, payload, cancellationToken);
+    }
+
+    private async Task<int?> SendMessageAsync(string? chatId, object payload, CancellationToken cancellationToken)
+    {
+        var config = _options.CurrentValue;
+        if (!config.Enabled)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.BotToken) || string.IsNullOrWhiteSpace(chatId))
+        {
+            _logger.LogWarning("Telegram bot token or chat id is missing.");
+            return null;
+        }
+
+        var wrappedPayload = new Dictionary<string, object?>
+        {
+            ["chat_id"] = chatId
+        };
+
+        foreach (var property in payload.GetType().GetProperties())
+        {
+            wrappedPayload[property.Name] = property.GetValue(payload);
+        }
+
+        using var content = new StringContent(JsonSerializer.Serialize(wrappedPayload), Encoding.UTF8, "application/json");
         var response = await _httpClient.PostAsync($"https://api.telegram.org/bot{config.BotToken}/sendMessage", content, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {

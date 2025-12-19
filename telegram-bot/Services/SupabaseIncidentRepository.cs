@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Extensions.Options;
 using Supabase;
 using TelegramBot.Models;
@@ -19,11 +20,9 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
 
     public async Task AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
     {
-        var url = _options.CurrentValue.Url;
-        var key = _options.CurrentValue.ServiceRoleKey;
-        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(key))
+        if (!TryGetConnectionInfo(_options.CurrentValue, out var url, out var key))
         {
-            _logger.LogWarning("Supabase URL or service role key is not configured.");
+            _logger.LogWarning("Supabase connection string or service role key is not configured.");
             return;
         }
 
@@ -92,5 +91,46 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         }
 
         return _client!;
+    }
+
+    private static bool TryGetConnectionInfo(SupabaseOptions options, out string url, out string key)
+    {
+        url = "";
+        key = "";
+
+        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+        {
+            var builder = new DbConnectionStringBuilder
+            {
+                ConnectionString = options.ConnectionString
+            };
+
+            if (TryGetBuilderValue(builder, "Url", out url) &&
+                (TryGetBuilderValue(builder, "ServiceRoleKey", out key) || TryGetBuilderValue(builder, "Key", out key)))
+            {
+                return true;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Url) && !string.IsNullOrWhiteSpace(options.ServiceRoleKey))
+        {
+            url = options.Url;
+            key = options.ServiceRoleKey;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetBuilderValue(DbConnectionStringBuilder builder, string key, out string value)
+    {
+        if (builder.TryGetValue(key, out var raw) && raw is not null)
+        {
+            value = raw.ToString() ?? "";
+            return !string.IsNullOrWhiteSpace(value);
+        }
+
+        value = "";
+        return false;
     }
 }
