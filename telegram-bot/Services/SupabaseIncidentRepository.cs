@@ -29,17 +29,14 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
 
         var command = connection.CreateCommand();
         command.CommandText = """
-            insert into public.fire_incidents (id, datetime, photo_url, street)
-            values (@id, @datetime, @photo_url, @street)
-            on conflict (id) do nothing;
+            insert into public.fire_incidents (datetime, photo_url, street)
+            values (@datetime, @photo_url, @street);
             """;
 
-        var id = Guid.NewGuid().ToString("N");
         var when = candidate.PublishedAt ?? DateTimeOffset.UtcNow;
         var photoUrl = ResolvePhotoUrl(candidate);
         var street = ResolveStreet(candidate);
 
-        command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("datetime", when.UtcDateTime);
         command.Parameters.AddWithValue("photo_url", photoUrl);
         command.Parameters.AddWithValue("street", street);
