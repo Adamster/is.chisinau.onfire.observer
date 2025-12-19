@@ -31,7 +31,9 @@ public sealed class ApprovalProcessingService : BackgroundService
             try
             {
                 var approved = _store.GetAll()
-                    .Where(item => item.Decision == ApprovalDecision.Approved && !item.IsPersisted)
+                    .Where(item => item.Decision == ApprovalDecision.Approved &&
+                                   !item.IsPersisted &&
+                                   !string.IsNullOrWhiteSpace(item.SelectedStreet))
                     .ToList();
 
                 foreach (var incident in approved)
@@ -43,7 +45,7 @@ public sealed class ApprovalProcessingService : BackgroundService
 
                     try
                     {
-                        await _repository.AddIncidentAsync(incident.Candidate, stoppingToken);
+                        await _repository.AddIncidentAsync(incident.Candidate, incident.SelectedStreet, stoppingToken);
                         _store.TryMarkPersisted(incident.Candidate.Id);
                     }
                     catch

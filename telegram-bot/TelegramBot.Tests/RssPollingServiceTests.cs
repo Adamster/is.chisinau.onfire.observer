@@ -60,6 +60,14 @@ public sealed class RssPollingServiceTests
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
+        public Task<int?> SendStreetSelectionAsync(
+            string chatId,
+            string prompt,
+            IReadOnlyList<string> streets,
+            string callbackToken,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
+
         public Task AnswerCallbackAsync(
             string callbackQueryId,
             string message,

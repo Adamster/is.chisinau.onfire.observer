@@ -54,9 +54,10 @@ public sealed class ArticleDetailsFetcher : IArticleDetailsFetcher
             document.LoadHtml(html);
 
             var photoUrl = ResolvePhotoUrl(document, baseUri);
-            var street = ResolveStreet(document);
+            var streets = ResolveStreets(document);
+            var street = streets.FirstOrDefault();
 
-            return new ArticleDetails(photoUrl, street);
+            return new ArticleDetails(photoUrl, street, streets);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -92,7 +93,7 @@ public sealed class ArticleDetailsFetcher : IArticleDetailsFetcher
             : new Uri(baseUri, url).ToString();
     }
 
-    private static string? ResolveStreet(HtmlDocument document)
+    private static IReadOnlyList<string> ResolveStreets(HtmlDocument document)
     {
         var articleText = document.DocumentNode.SelectSingleNode("//article")?.InnerText ??
                           document.DocumentNode.SelectSingleNode("//body")?.InnerText ??
@@ -100,12 +101,37 @@ public sealed class ArticleDetailsFetcher : IArticleDetailsFetcher
 
         if (string.IsNullOrWhiteSpace(articleText))
         {
-            return null;
+            return Array.Empty<string>();
         }
 
         var decoded = WebUtility.HtmlDecode(articleText);
         var normalized = Regex.Replace(decoded, @"\s+", " ").Trim();
-        var match = StreetRegex.Match(normalized);
-        return match.Success ? match.Value.Trim() : null;
+        var matches = StreetRegex.Matches(normalized);
+        if (matches.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var results = new List<string>();
+        foreach (Match match in matches)
+        {
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            var value = match.Value.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (!results.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                results.Add(value);
+            }
+        }
+
+        return results;
     }
 }

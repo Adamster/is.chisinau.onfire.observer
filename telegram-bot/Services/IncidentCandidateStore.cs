@@ -55,6 +55,26 @@ public sealed class IncidentCandidateStore
         return false;
     }
 
+    public bool TrySetStreetOptions(string candidateId, IReadOnlyList<string> options)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            return pending.TrySetStreetOptions(options);
+        }
+
+        return false;
+    }
+
+    public bool TrySelectStreet(string candidateId, string street)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            return pending.TrySelectStreet(street);
+        }
+
+        return false;
+    }
+
     public bool TryMarkPersisted(string candidateId)
     {
         if (_candidates.TryGetValue(candidateId, out var pending))
@@ -85,6 +105,19 @@ public sealed class IncidentCandidateStore
 
     public bool TryGetCandidate(string candidateId, out PendingIncident? pending) =>
         _candidates.TryGetValue(candidateId, out pending);
+
+    public bool TryGetStreetOptions(string candidateId, out IReadOnlyList<string>? options)
+    {
+        options = null;
+
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            options = pending.StreetOptions;
+            return true;
+        }
+
+        return false;
+    }
 
     public bool TryGetCallbackToken(string candidateId, out string? token) =>
         _candidateTokens.TryGetValue(candidateId, out token);

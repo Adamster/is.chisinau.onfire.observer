@@ -23,7 +23,10 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         _logger = logger;
     }
 
-    public async Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+    public async Task<FireIncident?> AddIncidentAsync(
+        RssItemCandidate candidate,
+        string? streetOverride,
+        CancellationToken cancellationToken)
     {
         if (!TryGetConnectionInfo(_options.CurrentValue, out var url, out var key))
         {
@@ -31,7 +34,7 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
             return null;
         }
 
-        var payload = await BuildPayloadAsync(candidate, cancellationToken);
+        var payload = await BuildPayloadAsync(candidate, streetOverride, cancellationToken);
         var client = await GetClientAsync(url, key, cancellationToken);
 
         _logger.LogInformation("Attempting Supabase insert for {CandidateId}.", candidate.Id);
@@ -57,12 +60,15 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         return payload;
     }
 
-    private async Task<FireIncident> BuildPayloadAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+    private async Task<FireIncident> BuildPayloadAsync(
+        RssItemCandidate candidate,
+        string? streetOverride,
+        CancellationToken cancellationToken)
     {
         var when = candidate.PublishedAt ?? DateTimeOffset.UtcNow;
         var details = await _articleDetailsFetcher.FetchAsync(candidate, cancellationToken);
         var photoUrl = ResolvePhotoUrl(candidate, details);
-        var street = ResolveStreet(candidate, details);
+        var street = ResolveStreet(candidate, details, streetOverride);
 
         return new FireIncident
         {
@@ -87,8 +93,13 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         return string.IsNullOrWhiteSpace(candidate.Link) ? "" : candidate.Link;
     }
 
-    private string ResolveStreet(RssItemCandidate candidate, ArticleDetails details)
+    private string ResolveStreet(RssItemCandidate candidate, ArticleDetails details, string? streetOverride)
     {
+        if (!string.IsNullOrWhiteSpace(streetOverride))
+        {
+            return streetOverride!;
+        }
+
         if (!string.IsNullOrWhiteSpace(_options.CurrentValue.DefaultStreet))
         {
             return _options.CurrentValue.DefaultStreet!;

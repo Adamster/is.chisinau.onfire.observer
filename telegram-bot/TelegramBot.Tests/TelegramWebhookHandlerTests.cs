@@ -18,6 +18,7 @@ public sealed class TelegramWebhookHandlerTests
 
         var notifier = new StubTelegramNotifier();
         var repository = new StubIncidentRepository();
+        var detailsFetcher = new StubArticleDetailsFetcher();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "123"
@@ -29,6 +30,7 @@ public sealed class TelegramWebhookHandlerTests
             store,
             notifier,
             repository,
+            detailsFetcher,
             options,
             rssOptions,
             supabaseOptions,
@@ -68,6 +70,7 @@ public sealed class TelegramWebhookHandlerTests
 
         var notifier = new StubTelegramNotifier();
         var repository = new StubIncidentRepository();
+        var detailsFetcher = new StubArticleDetailsFetcher();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "999"
@@ -79,6 +82,7 @@ public sealed class TelegramWebhookHandlerTests
             store,
             notifier,
             repository,
+            detailsFetcher,
             options,
             rssOptions,
             supabaseOptions,
@@ -109,12 +113,75 @@ public sealed class TelegramWebhookHandlerTests
         Assert.Equal(ApprovalDecision.Pending, store.GetAll().Single().Decision);
     }
 
+    [Fact]
+    public async Task HandleUpdate_StreetSelectionInsertsCandidate()
+    {
+        var store = new IncidentCandidateStore();
+        store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
+        store.TrySetDecision("item-1", ApprovalDecision.Approved);
+        store.TrySetStreetOptions("item-1", new[] { "Strada Test" });
+        Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
+
+        var notifier = new StubTelegramNotifier();
+        var repository = new StubIncidentRepository();
+        var detailsFetcher = new StubArticleDetailsFetcher();
+        var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
+        {
+            ChatId = "123"
+        });
+        var rssOptions = new TestOptionsMonitor<RssOptions>(new RssOptions());
+        var supabaseOptions = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions());
+
+        var handler = new TelegramWebhookHandler(
+            store,
+            notifier,
+            repository,
+            detailsFetcher,
+            options,
+            rssOptions,
+            supabaseOptions,
+            NullLogger<TelegramWebhookHandler>.Instance);
+        var update = new Update
+        {
+            Id = 1,
+            CallbackQuery = new CallbackQuery
+            {
+                Id = "callback-3",
+                Data = $"street:{callbackToken}:0",
+                Message = new Message
+                {
+                    Id = 42,
+                    Date = DateTime.UtcNow,
+                    Chat = new Chat
+                    {
+                        Id = 123,
+                        Type = ChatType.Private
+                    }
+                }
+            }
+        };
+
+        var handled = await handler.HandleUpdateAsync(update, CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal("Strada Test", repository.LastStreetOverride);
+        Assert.Equal(1, repository.CallCount);
+    }
+
     private sealed class StubTelegramNotifier : ITelegramNotifier
     {
         public Task<int?> SendCandidateAsync(RssItemCandidate candidate, string callbackToken, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
+
+        public Task<int?> SendStreetSelectionAsync(
+            string chatId,
+            string prompt,
+            IReadOnlyList<string> streets,
+            string callbackToken,
+            CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
         public Task AnswerCallbackAsync(
@@ -133,16 +200,31 @@ public sealed class TelegramWebhookHandlerTests
 
     private sealed class StubIncidentRepository : IIncidentRepository
     {
-        public Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+        public int CallCount { get; private set; }
+
+        public string? LastStreetOverride { get; private set; }
+
+        public Task<FireIncident?> AddIncidentAsync(
+            RssItemCandidate candidate,
+            string? streetOverride,
+            CancellationToken cancellationToken)
         {
+            CallCount++;
+            LastStreetOverride = streetOverride;
             var incident = new FireIncident
             {
                 Datetime = (candidate.PublishedAt ?? DateTimeOffset.UtcNow).UtcDateTime,
                 PhotoUrl = candidate.Link,
-                Street = candidate.Title
+                Street = streetOverride ?? candidate.Title
             };
 
             return Task.FromResult<FireIncident?>(incident);
         }
+    }
+
+    private sealed class StubArticleDetailsFetcher : IArticleDetailsFetcher
+    {
+        public Task<ArticleDetails> FetchAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
+            Task.FromResult(new ArticleDetails(candidate.Link, "Strada Test", new[] { "Strada Test" }));
     }
 }
