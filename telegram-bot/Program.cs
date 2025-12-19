@@ -19,7 +19,7 @@ builder.Services
     .Bind(builder.Configuration.GetSection(RssOptions.SectionName))
     .ValidateDataAnnotations();
 
-builder.Services.AddHttpClient<RssFetcher>();
+builder.Services.AddHttpClient<IRssFetcher, RssFetcher>();
 builder.Services.AddSingleton<IncidentCandidateStore>();
 builder.Services.AddHostedService<RssPollingService>();
 

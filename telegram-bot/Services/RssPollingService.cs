@@ -4,13 +4,13 @@ namespace TelegramBot.Services;
 
 public sealed class RssPollingService : BackgroundService
 {
-    private readonly RssFetcher _fetcher;
+    private readonly IRssFetcher _fetcher;
     private readonly IncidentCandidateStore _store;
     private readonly IOptionsMonitor<RssOptions> _options;
     private readonly ILogger<RssPollingService> _logger;
 
     public RssPollingService(
-        RssFetcher fetcher,
+        IRssFetcher fetcher,
         IncidentCandidateStore store,
         IOptionsMonitor<RssOptions> options,
         ILogger<RssPollingService> logger)

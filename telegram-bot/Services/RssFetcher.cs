@@ -5,7 +5,7 @@ using TelegramBot.Models;
 
 namespace TelegramBot.Services;
 
-public sealed class RssFetcher
+public sealed class RssFetcher : IRssFetcher
 {
     private readonly HttpClient _httpClient;
     private readonly IOptionsMonitor<RssOptions> _options;
