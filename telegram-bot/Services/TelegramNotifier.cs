@@ -68,7 +68,11 @@ public sealed class TelegramNotifier : ITelegramNotifier
             cancellationToken);
     }
 
-    public async Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken)
+    public async Task AnswerCallbackAsync(
+        string callbackQueryId,
+        string message,
+        bool showAlert,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(callbackQueryId))
         {
@@ -95,13 +99,82 @@ public sealed class TelegramNotifier : ITelegramNotifier
             {
                 CallbackQueryId = callbackQueryId,
                 Text = string.IsNullOrWhiteSpace(message) ? null : message,
-                ShowAlert = false
+                ShowAlert = showAlert
             };
             await client.SendRequest(request, cancellationToken);
         }
         catch (Exception ex) when (ex is Telegram.Bot.Exceptions.ApiRequestException or TaskCanceledException)
         {
             _logger.LogWarning(ex, "Telegram answerCallbackQuery failed.");
+        }
+    }
+
+    public async Task RemoveInlineKeyboardAsync(long chatId, int messageId, CancellationToken cancellationToken)
+    {
+        var config = _options.CurrentValue;
+        if (!config.Enabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.BotToken))
+        {
+            _logger.LogWarning("Telegram bot token is missing.");
+            return;
+        }
+
+        try
+        {
+            var client = new TelegramBotClient(config.BotToken);
+            var request = new EditMessageReplyMarkupRequest
+            {
+                ChatId = new ChatId(chatId),
+                MessageId = messageId,
+                ReplyMarkup = null
+            };
+            await client.SendRequest(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is Telegram.Bot.Exceptions.ApiRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Telegram editMessageReplyMarkup failed.");
+        }
+    }
+
+    public async Task UpdateMessageTextAsync(long chatId, int messageId, string message, CancellationToken cancellationToken)
+    {
+        var config = _options.CurrentValue;
+        if (!config.Enabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.BotToken))
+        {
+            _logger.LogWarning("Telegram bot token is missing.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            _logger.LogWarning("Telegram message text is missing.");
+            return;
+        }
+
+        try
+        {
+            var client = new TelegramBotClient(config.BotToken);
+            var request = new EditMessageTextRequest
+            {
+                ChatId = new ChatId(chatId),
+                MessageId = messageId,
+                Text = message,
+                ParseMode = ParseMode.Html
+            };
+            await client.SendRequest(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is Telegram.Bot.Exceptions.ApiRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Telegram editMessageText failed.");
         }
     }
 

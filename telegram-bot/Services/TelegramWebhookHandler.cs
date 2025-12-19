@@ -49,21 +49,21 @@ public sealed class TelegramWebhookHandler
         if (!IsAuthorized(callback.Message?.Chat?.Id))
         {
             _logger.LogWarning("Ignoring callback from unauthorized chat.");
-            await AnswerCallbackAsync(callback, "Not authorized.", cancellationToken);
+            await AnswerCallbackAsync(callback, "Not authorized.", showAlert: true, cancellationToken);
             return false;
         }
 
         if (!CallbackDataParser.TryParse(callback.Data, out var action, out var callbackToken))
         {
             _logger.LogWarning("Unable to parse callback data: {Data}", callback.Data);
-            await AnswerCallbackAsync(callback, "Unable to parse action.", cancellationToken);
+            await AnswerCallbackAsync(callback, "Unable to parse action.", showAlert: true, cancellationToken);
             return false;
         }
 
         if (!_store.TryGetCandidateId(callbackToken!, out var candidateId) || string.IsNullOrWhiteSpace(candidateId))
         {
             _logger.LogWarning("Unable to resolve callback token: {CallbackToken}", callbackToken);
-            await AnswerCallbackAsync(callback, "This action has expired.", cancellationToken);
+            await AnswerCallbackAsync(callback, "This action has expired.", showAlert: true, cancellationToken);
             return false;
         }
 
@@ -73,7 +73,7 @@ public sealed class TelegramWebhookHandler
         if (!updated)
         {
             _logger.LogWarning("Candidate decision could not be updated for {CandidateId}.", candidateId);
-            await AnswerCallbackAsync(callback, "Unable to update this item.", cancellationToken);
+            await AnswerCallbackAsync(callback, "Unable to update this item.", showAlert: true, cancellationToken);
             return false;
         }
 
@@ -83,16 +83,21 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        var chatId = callback.Message?.Chat?.Id.ToString();
-        if (string.IsNullOrWhiteSpace(chatId))
+        var chat = callback.Message?.Chat?.Id ?? callback.From?.Id;
+        if (!chat.HasValue)
         {
             _logger.LogWarning("Unable to send response for candidate {CandidateId} due to missing chat id.", candidateId);
             return false;
         }
 
+        await RemoveInlineKeyboardAsync(callback, cancellationToken);
+        await UpdateMessageStatusAsync(callback, decision, cancellationToken);
+
+        var chatId = chat.Value.ToString();
+
         if (decision == ApprovalDecision.Rejected)
         {
-            await AnswerCallbackAsync(callback, "Rejected.", cancellationToken);
+            await AnswerCallbackAsync(callback, "Rejected.", showAlert: true, cancellationToken);
             await _notifier.SendMessageAsync(
                 chatId,
                 "This article will be ignored and will not be considered.",
@@ -103,7 +108,7 @@ public sealed class TelegramWebhookHandler
 
         if (!_store.TryBeginPersisting(candidateId))
         {
-            await AnswerCallbackAsync(callback, "Already processing.", cancellationToken);
+            await AnswerCallbackAsync(callback, "Already processing.", showAlert: true, cancellationToken);
             await _notifier.SendMessageAsync(
                 chatId,
                 "This article is already being processed.",
@@ -111,7 +116,8 @@ public sealed class TelegramWebhookHandler
             return true;
         }
 
-        await AnswerCallbackAsync(callback, "Approved. Processing.", cancellationToken);
+        await AnswerCallbackAsync(callback, "Approved. Processing.", showAlert: true, cancellationToken);
+        await _notifier.SendMessageAsync(chatId, "Approved. Processing.", cancellationToken);
 
         try
         {
@@ -208,13 +214,69 @@ public sealed class TelegramWebhookHandler
         return chatId?.ToString() == expectedChatId;
     }
 
-    private Task AnswerCallbackAsync(CallbackQuery callback, string message, CancellationToken cancellationToken)
+    private Task AnswerCallbackAsync(
+        CallbackQuery callback,
+        string message,
+        bool showAlert,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(callback.Id))
         {
             return Task.CompletedTask;
         }
 
-        return _notifier.AnswerCallbackAsync(callback.Id, message, cancellationToken);
+        return _notifier.AnswerCallbackAsync(callback.Id, message, showAlert, cancellationToken);
+    }
+
+    private Task RemoveInlineKeyboardAsync(CallbackQuery callback, CancellationToken cancellationToken)
+    {
+        if (callback.Message?.Chat?.Id is not { } chatId || callback.Message?.MessageId is not { } messageId)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _notifier.RemoveInlineKeyboardAsync(chatId, messageId, cancellationToken);
+    }
+
+    private Task UpdateMessageStatusAsync(
+        CallbackQuery callback,
+        ApprovalDecision decision,
+        CancellationToken cancellationToken)
+    {
+        if (callback.Message?.Chat?.Id is not { } chatId ||
+            callback.Message?.MessageId is not { } messageId)
+        {
+            return Task.CompletedTask;
+        }
+
+        var updated = BuildStatusMessage(callback.Message.Text, decision);
+        if (string.IsNullOrWhiteSpace(updated))
+        {
+            return Task.CompletedTask;
+        }
+
+        return _notifier.UpdateMessageTextAsync(chatId, messageId, updated, cancellationToken);
+    }
+
+    private static string? BuildStatusMessage(string? message, ApprovalDecision decision)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return null;
+        }
+
+        const string statusMarker = "<b>Status:</b>";
+        if (message.Contains(statusMarker, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var decisionText = decision == ApprovalDecision.Approved ? "Approved" : "Rejected";
+        return string.Join(Environment.NewLine, new[]
+        {
+            message,
+            string.Empty,
+            $"{statusMarker} {decisionText}"
+        });
     }
 }
