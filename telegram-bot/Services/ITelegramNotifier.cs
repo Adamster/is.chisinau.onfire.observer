@@ -5,4 +5,6 @@ namespace TelegramBot.Services;
 public interface ITelegramNotifier
 {
     Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken);
+
+    Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken);
 }

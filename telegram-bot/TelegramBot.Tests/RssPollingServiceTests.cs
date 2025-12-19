@@ -56,5 +56,8 @@ public sealed class RssPollingServiceTests
     {
         public Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
+
+        public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
     }
 }

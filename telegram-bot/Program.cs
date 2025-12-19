@@ -14,6 +14,10 @@ builder.Services
 builder.Services
     .AddOptions<SupabaseOptions>()
     .Bind(builder.Configuration.GetSection(SupabaseOptions.SectionName))
+    .Configure(options =>
+    {
+        options.ConnectionString ??= builder.Configuration.GetConnectionString(SupabaseOptions.SectionName);
+    })
     .ValidateDataAnnotations();
 
 builder.Services
@@ -39,6 +43,7 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
         telegram = new { telegram.Value.Enabled, telegram.Value.ChatId },
         supabase = new
         {
+            hasConnectionString = !string.IsNullOrWhiteSpace(supabase.Value.ConnectionString),
             hasUrl = supabase.Value.Url is not null,
             hasServiceRoleKey = supabase.Value.ServiceRoleKey is not null,
             supabase.Value.DefaultPhotoUrl,
@@ -83,9 +88,11 @@ public sealed class SupabaseOptions
 {
     public const string SectionName = "Supabase";
 
-    public string? Url { get; init; }
+    public string? ConnectionString { get; set; }
 
-    public string? ServiceRoleKey { get; init; }
+    public string? Url { get; set; }
+
+    public string? ServiceRoleKey { get; set; }
 
     public string? DefaultPhotoUrl { get; init; }
 
