@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Telegram.Bot.Types;
 using TelegramBot.Models;
 
 namespace TelegramBot.Services;
@@ -28,7 +29,7 @@ public sealed class TelegramWebhookHandler
         _logger = logger;
     }
 
-    public bool HandleUpdate(TelegramUpdate update)
+    public bool HandleUpdate(Update update)
     {
         if (TryHandleStart(update))
         {
@@ -38,7 +39,7 @@ public sealed class TelegramWebhookHandler
         var callback = update.CallbackQuery;
         if (callback?.Data is null)
         {
-            _logger.LogDebug("Ignoring non-callback update {UpdateId}.", update.UpdateId);
+            _logger.LogDebug("Ignoring non-callback update {UpdateId}.", update.Id);
             return false;
         }
 
@@ -67,7 +68,7 @@ public sealed class TelegramWebhookHandler
         return true;
     }
 
-    private bool TryHandleStart(TelegramUpdate update)
+    private bool TryHandleStart(Update update)
     {
         var message = update.Message;
         if (message?.Text is null)
