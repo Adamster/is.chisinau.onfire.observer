@@ -26,6 +26,7 @@ builder.Services
     .ValidateDataAnnotations();
 
 builder.Services.AddHttpClient<IRssFetcher, RssFetcher>();
+builder.Services.AddHttpClient<IArticleDetailsFetcher, ArticleDetailsFetcher>();
 builder.Services.AddSingleton<ITelegramNotifier, TelegramNotifier>();
 builder.Services.AddSingleton<IncidentCandidateStore>();
 builder.Services.AddSingleton<TelegramWebhookHandler>();
