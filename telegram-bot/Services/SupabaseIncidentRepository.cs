@@ -34,8 +34,26 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         var payload = await BuildPayloadAsync(candidate, cancellationToken);
         var client = await GetClientAsync(url, key, cancellationToken);
 
-        await client.From<FireIncident>().Insert(payload, cancellationToken: cancellationToken);
-        _logger.LogInformation("Inserted incident row for {CandidateId}.", candidate.Id);
+        _logger.LogInformation("Attempting Supabase insert for {CandidateId}.", candidate.Id);
+        var response = await client.From<FireIncident>().Insert(payload, cancellationToken: cancellationToken);
+        if (response.ResponseMessage is null || !response.ResponseMessage.IsSuccessStatusCode)
+        {
+            var reason = response.ResponseMessage?.ReasonPhrase ?? "Unknown error";
+            var errorMessage = "No error message provided.";
+            if (response.ResponseMessage?.Content is not null)
+            {
+                errorMessage = await response.ResponseMessage.Content.ReadAsStringAsync(cancellationToken);
+            }
+            _logger.LogError(
+                "Supabase insert failed for {CandidateId}. Reason: {Reason}. Error: {Error}",
+                candidate.Id,
+                reason,
+                errorMessage);
+            throw new InvalidOperationException($"Supabase insert failed: {reason}. {errorMessage}");
+        }
+
+        var statusCode = (int)response.ResponseMessage!.StatusCode;
+        _logger.LogInformation("Inserted incident row for {CandidateId}. Status {StatusCode}.", candidate.Id, statusCode);
         return payload;
     }
 

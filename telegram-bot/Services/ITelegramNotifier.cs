@@ -8,5 +8,9 @@ public interface ITelegramNotifier
 
     Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken);
 
-    Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken);
+    Task AnswerCallbackAsync(string callbackQueryId, string message, bool showAlert, CancellationToken cancellationToken);
+
+    Task RemoveInlineKeyboardAsync(long chatId, int messageId, CancellationToken cancellationToken);
+
+    Task UpdateMessageTextAsync(long chatId, int messageId, string message, CancellationToken cancellationToken);
 }
