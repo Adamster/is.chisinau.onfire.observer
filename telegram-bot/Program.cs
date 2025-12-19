@@ -29,10 +29,12 @@ builder.Services.AddHttpClient<IRssFetcher, RssFetcher>();
 builder.Services.AddHttpClient<IArticleDetailsFetcher, ArticleDetailsFetcher>();
 builder.Services.AddSingleton<ITelegramNotifier, TelegramNotifier>();
 builder.Services.AddSingleton<IncidentCandidateStore>();
+builder.Services.AddSingleton<TelegramUpdateParser>();
 builder.Services.AddSingleton<TelegramWebhookHandler>();
 builder.Services.AddSingleton<IIncidentRepository, SupabaseIncidentRepository>();
 builder.Services.AddHostedService<RssPollingService>();
 builder.Services.AddHostedService<ApprovalProcessingService>();
+builder.Services.AddHostedService<TelegramWebhookSetupService>();
 
 var app = builder.Build();
 
@@ -59,14 +61,23 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
     }));
 
 app.MapPost("/telegram/update", async (
-    [FromBody] Update update,
+    HttpRequest request,
+    TelegramUpdateParser parser,
     TelegramWebhookHandler handler,
     IOptions<TelegramBotOptions> options,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     if (!options.Value.Enabled)
     {
         return Results.Ok(new { status = "disabled" });
+    }
+
+    var update = await parser.ParseAsync(request, cancellationToken);
+    if (update is null)
+    {
+        logger.LogWarning("Unable to parse Telegram update payload.");
+        return Results.Ok(new { status = "invalid" });
     }
 
     var handled = await handler.HandleUpdateAsync(update, cancellationToken);
@@ -84,6 +95,9 @@ public sealed class TelegramBotOptions
     public string? BotToken { get; init; }
 
     public string? ChatId { get; init; }
+
+    [Url]
+    public string? WebhookUrl { get; init; }
 }
 
 public sealed class SupabaseOptions

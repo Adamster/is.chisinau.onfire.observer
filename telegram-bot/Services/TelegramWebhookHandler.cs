@@ -46,7 +46,7 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        if (!IsAuthorized(callback.Message?.Chat?.Id))
+        if (!IsAuthorized(callback.Message?.Chat?.Id, callback.From?.Id))
         {
             _logger.LogWarning("Ignoring callback from unauthorized chat.");
             await AnswerCallbackAsync(callback, "Not authorized.", showAlert: true, cancellationToken);
@@ -157,7 +157,7 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        if (!IsAuthorized(message.Chat?.Id))
+        if (!IsAuthorized(message.Chat?.Id, message.From?.Id))
         {
             _logger.LogWarning("Ignoring /start from unauthorized chat.");
             return false;
@@ -203,7 +203,7 @@ public sealed class TelegramWebhookHandler
         });
     }
 
-    private bool IsAuthorized(long? chatId)
+    private bool IsAuthorized(long? chatId, long? userId)
     {
         var expectedChatId = _options.CurrentValue.ChatId;
         if (string.IsNullOrWhiteSpace(expectedChatId))
@@ -211,7 +211,7 @@ public sealed class TelegramWebhookHandler
             return true;
         }
 
-        return chatId?.ToString() == expectedChatId;
+        return chatId?.ToString() == expectedChatId || userId?.ToString() == expectedChatId;
     }
 
     private Task AnswerCallbackAsync(
