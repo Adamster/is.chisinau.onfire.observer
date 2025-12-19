@@ -14,6 +14,7 @@ public sealed class TelegramWebhookHandlerTests
     {
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
+        Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
 
         var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
@@ -36,7 +37,7 @@ public sealed class TelegramWebhookHandlerTests
             CallbackQuery = new CallbackQuery
             {
                 Id = "callback-1",
-                Data = "approve:item-1",
+                Data = $"approve:{callbackToken}",
                 Message = new Message
                 {
                     Id = 42,
@@ -61,6 +62,7 @@ public sealed class TelegramWebhookHandlerTests
     {
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
+        Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
 
         var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
@@ -83,7 +85,7 @@ public sealed class TelegramWebhookHandlerTests
             CallbackQuery = new CallbackQuery
             {
                 Id = "callback-2",
-                Data = "approve:item-1",
+                Data = $"approve:{callbackToken}",
                 Message = new Message
                 {
                     Id = 42,
@@ -105,7 +107,7 @@ public sealed class TelegramWebhookHandlerTests
 
     private sealed class StubTelegramNotifier : ITelegramNotifier
     {
-        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
+        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, string callbackToken, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>

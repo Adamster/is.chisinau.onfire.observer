@@ -21,7 +21,7 @@ public sealed class TelegramNotifier : ITelegramNotifier
         _logger = logger;
     }
 
-    public async Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+    public async Task<int?> SendCandidateAsync(RssItemCandidate candidate, string callbackToken, CancellationToken cancellationToken)
     {
         var config = _options.CurrentValue;
         if (!config.Enabled)
@@ -29,9 +29,11 @@ public sealed class TelegramNotifier : ITelegramNotifier
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(config.BotToken) || string.IsNullOrWhiteSpace(config.ChatId))
+        if (string.IsNullOrWhiteSpace(config.BotToken) ||
+            string.IsNullOrWhiteSpace(config.ChatId) ||
+            string.IsNullOrWhiteSpace(callbackToken))
         {
-            _logger.LogWarning("Telegram bot token or chat id is missing.");
+            _logger.LogWarning("Telegram bot token, chat id, or callback token is missing.");
             return null;
         }
 
@@ -39,8 +41,8 @@ public sealed class TelegramNotifier : ITelegramNotifier
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("Approve", $"approve:{candidate.Id}"),
-                InlineKeyboardButton.WithCallbackData("Reject", $"reject:{candidate.Id}")
+                InlineKeyboardButton.WithCallbackData("Approve", $"approve:{callbackToken}"),
+                InlineKeyboardButton.WithCallbackData("Reject", $"reject:{callbackToken}")
             }
         });
 

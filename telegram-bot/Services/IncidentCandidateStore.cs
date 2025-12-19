@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Collections.Concurrent;
 using TelegramBot.Models;
 
@@ -6,11 +8,30 @@ namespace TelegramBot.Services;
 public sealed class IncidentCandidateStore
 {
     private readonly ConcurrentDictionary<string, PendingIncident> _candidates = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _candidateTokens = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _callbackTokens = new(StringComparer.OrdinalIgnoreCase);
 
     public bool TryAdd(RssItemCandidate candidate)
     {
         var pending = new PendingIncident(candidate);
-        return _candidates.TryAdd(candidate.Id, pending);
+        if (!_candidates.TryAdd(candidate.Id, pending))
+        {
+            return false;
+        }
+
+        var token = GenerateToken(candidate.Id);
+        if (!_callbackTokens.TryAdd(token, candidate.Id))
+        {
+            token = GenerateToken($"{candidate.Id}:{Guid.NewGuid():N}");
+            if (!_callbackTokens.TryAdd(token, candidate.Id))
+            {
+                _candidates.TryRemove(candidate.Id, out _);
+                return false;
+            }
+        }
+
+        _candidateTokens[candidate.Id] = token;
+        return true;
     }
 
     public bool TryMarkNotified(string candidateId, int messageId)
@@ -44,5 +65,17 @@ public sealed class IncidentCandidateStore
         return false;
     }
 
+    public bool TryGetCallbackToken(string candidateId, out string token) =>
+        _candidateTokens.TryGetValue(candidateId, out token);
+
+    public bool TryGetCandidateId(string callbackToken, out string candidateId) =>
+        _callbackTokens.TryGetValue(callbackToken, out candidateId);
+
     public IReadOnlyCollection<PendingIncident> GetAll() => _candidates.Values.ToList();
+
+    private static string GenerateToken(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes[..16]).ToLowerInvariant();
+    }
 }

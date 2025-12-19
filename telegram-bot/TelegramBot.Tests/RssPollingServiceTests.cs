@@ -54,7 +54,7 @@ public sealed class RssPollingServiceTests
 
     private sealed class StubTelegramNotifier : ITelegramNotifier
     {
-        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
+        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, string callbackToken, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
