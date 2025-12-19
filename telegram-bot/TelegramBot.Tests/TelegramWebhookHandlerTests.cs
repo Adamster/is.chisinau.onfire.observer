@@ -39,7 +39,7 @@ public sealed class TelegramWebhookHandlerTests
                 Data = "approve:item-1",
                 Message = new Message
                 {
-                    MessageId = 42,
+                    Id = 42,
                     Date = DateTime.UtcNow,
                     Chat = new Chat
                     {
@@ -86,7 +86,7 @@ public sealed class TelegramWebhookHandlerTests
                 Data = "approve:item-1",
                 Message = new Message
                 {
-                    MessageId = 42,
+                    Id = 42,
                     Date = DateTime.UtcNow,
                     Chat = new Chat
                     {
