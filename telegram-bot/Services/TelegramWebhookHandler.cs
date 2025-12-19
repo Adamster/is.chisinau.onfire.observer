@@ -49,14 +49,20 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        if (!CallbackDataParser.TryParse(callback.Data, out var action, out var candidateId))
+        if (!CallbackDataParser.TryParse(callback.Data, out var action, out var callbackToken))
         {
             _logger.LogWarning("Unable to parse callback data: {Data}", callback.Data);
             return false;
         }
 
+        if (!_store.TryGetCandidateId(callbackToken!, out var candidateId))
+        {
+            _logger.LogWarning("Unable to resolve callback token: {CallbackToken}", callbackToken);
+            return false;
+        }
+
         var decision = action == ApprovalAction.Approve ? ApprovalDecision.Approved : ApprovalDecision.Rejected;
-        var updated = _store.TrySetDecision(candidateId!, decision);
+        var updated = _store.TrySetDecision(candidateId, decision);
 
         if (!updated)
         {

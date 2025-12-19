@@ -33,3 +33,4 @@ These guidelines apply to all files under `telegram-bot/`.
 ## Testing
 - Keep tests deterministic; mock external calls.
 - Avoid network access in unit tests.
+- Always run `dotnet build` and `dotnet test` for this project. If `dotnet` is not available, install it first.
