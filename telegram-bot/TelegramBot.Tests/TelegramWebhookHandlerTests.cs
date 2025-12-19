@@ -32,7 +32,7 @@ public sealed class TelegramWebhookHandlerTests
             NullLogger<TelegramWebhookHandler>.Instance);
         var update = new Update
         {
-            UpdateId = 1,
+            Id = 1,
             CallbackQuery = new CallbackQuery
             {
                 Id = "callback-1",
@@ -79,7 +79,7 @@ public sealed class TelegramWebhookHandlerTests
             NullLogger<TelegramWebhookHandler>.Instance);
         var update = new Update
         {
-            UpdateId = 1,
+            Id = 1,
             CallbackQuery = new CallbackQuery
             {
                 Id = "callback-2",

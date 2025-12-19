@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Telegram.Bot;
+using Telegram.Bot.Requests;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -68,7 +69,7 @@ public sealed class TelegramNotifier : ITelegramNotifier
     private async Task<int?> SendMessageAsync(
         ChatId chatId,
         string message,
-        IReplyMarkup? replyMarkup,
+        ReplyMarkup? replyMarkup,
         CancellationToken cancellationToken)
     {
         var config = _options.CurrentValue;
@@ -86,13 +87,15 @@ public sealed class TelegramNotifier : ITelegramNotifier
         try
         {
             var client = new TelegramBotClient(config.BotToken);
-            var sent = await client.SendTextMessageAsync(
-                chatId: chatId,
-                text: message,
-                parseMode: ParseMode.Html,
-                replyMarkup: replyMarkup,
-                cancellationToken: cancellationToken);
-            return sent.MessageId;
+            var request = new SendMessageRequest
+            {
+                ChatId = chatId,
+                Text = message,
+                ParseMode = ParseMode.Html,
+                ReplyMarkup = replyMarkup
+            };
+            var sent = await client.SendRequest(request, cancellationToken);
+            return sent?.MessageId;
         }
         catch (Exception ex) when (ex is Telegram.Bot.Exceptions.ApiRequestException or TaskCanceledException)
         {

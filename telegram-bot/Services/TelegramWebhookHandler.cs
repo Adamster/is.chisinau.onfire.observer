@@ -39,7 +39,7 @@ public sealed class TelegramWebhookHandler
         var callback = update.CallbackQuery;
         if (callback?.Data is null)
         {
-            _logger.LogDebug("Ignoring non-callback update {UpdateId}.", update.UpdateId);
+            _logger.LogDebug("Ignoring non-callback update {UpdateId}.", update.Id);
             return false;
         }
 
