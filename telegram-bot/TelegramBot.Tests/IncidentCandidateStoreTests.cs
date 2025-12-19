@@ -20,4 +20,20 @@ public sealed class IncidentCandidateStoreTests
         Assert.False(addedSecond);
         Assert.Single(store.GetAll());
     }
+
+    [Fact]
+    public void TrySetDecision_UpdatesPendingCandidate()
+    {
+        var store = new IncidentCandidateStore();
+        var candidate = new RssItemCandidate("abc", "title", "link", DateTimeOffset.UtcNow, null);
+
+        store.TryAdd(candidate);
+
+        var updated = store.TrySetDecision("abc", ApprovalDecision.Approved);
+        var updatedAgain = store.TrySetDecision("abc", ApprovalDecision.Rejected);
+
+        Assert.True(updated);
+        Assert.False(updatedAgain);
+        Assert.Equal(ApprovalDecision.Approved, store.GetAll().Single().Decision);
+    }
 }

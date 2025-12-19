@@ -6,17 +6,20 @@ public sealed class RssPollingService : BackgroundService
 {
     private readonly IRssFetcher _fetcher;
     private readonly IncidentCandidateStore _store;
+    private readonly ITelegramNotifier _notifier;
     private readonly IOptionsMonitor<RssOptions> _options;
     private readonly ILogger<RssPollingService> _logger;
 
     public RssPollingService(
         IRssFetcher fetcher,
         IncidentCandidateStore store,
+        ITelegramNotifier notifier,
         IOptionsMonitor<RssOptions> options,
         ILogger<RssPollingService> logger)
     {
         _fetcher = fetcher;
         _store = store;
+        _notifier = notifier;
         _options = options;
         _logger = logger;
     }
@@ -37,6 +40,11 @@ public sealed class RssPollingService : BackgroundService
                     if (_store.TryAdd(candidate))
                     {
                         added++;
+                        var messageId = await _notifier.SendCandidateAsync(candidate, stoppingToken);
+                        if (messageId.HasValue)
+                        {
+                            _store.TryMarkNotified(candidate.Id, messageId.Value);
+                        }
                     }
                 }
 

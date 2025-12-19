@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using TelegramBot.Models;
 using TelegramBot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,7 +22,9 @@ builder.Services
     .ValidateDataAnnotations();
 
 builder.Services.AddHttpClient<IRssFetcher, RssFetcher>();
+builder.Services.AddHttpClient<ITelegramNotifier, TelegramNotifier>();
 builder.Services.AddSingleton<IncidentCandidateStore>();
+builder.Services.AddSingleton<TelegramWebhookHandler>();
 builder.Services.AddHostedService<RssPollingService>();
 
 var app = builder.Build();
@@ -39,6 +43,20 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
             keywordCount = rss.Value.Keywords.Count
         }
     }));
+
+app.MapPost("/telegram/update", (
+    [FromBody] TelegramUpdate update,
+    TelegramWebhookHandler handler,
+    IOptions<TelegramBotOptions> options) =>
+{
+    if (!options.Value.Enabled)
+    {
+        return Results.Ok(new { status = "disabled" });
+    }
+
+    var handled = handler.HandleUpdate(update);
+    return Results.Ok(new { status = handled ? "ok" : "ignored" });
+});
 
 app.Run();
 

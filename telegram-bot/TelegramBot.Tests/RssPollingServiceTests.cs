@@ -15,13 +15,14 @@ public sealed class RssPollingServiceTests
         {
             new RssItemCandidate("item-1", "Fire", "https://example.com/1", DateTimeOffset.UtcNow, null)
         });
+        var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<RssOptions>(new RssOptions
         {
             FeedUrl = "https://example.com/rss",
             PollIntervalSeconds = 30
         });
 
-        var service = new RssPollingService(fetcher, store, options, NullLogger<RssPollingService>.Instance);
+        var service = new RssPollingService(fetcher, store, notifier, options, NullLogger<RssPollingService>.Instance);
         using var cts = new CancellationTokenSource();
 
         await service.StartAsync(cts.Token);
@@ -49,5 +50,11 @@ public sealed class RssPollingServiceTests
             _called.TrySetResult();
             return Task.FromResult(_candidates);
         }
+    }
+
+    private sealed class StubTelegramNotifier : ITelegramNotifier
+    {
+        public Task<int?> SendCandidateAsync(RssItemCandidate candidate, CancellationToken cancellationToken) =>
+            Task.FromResult<int?>(null);
     }
 }
