@@ -25,7 +25,9 @@ builder.Services.AddHttpClient<IRssFetcher, RssFetcher>();
 builder.Services.AddHttpClient<ITelegramNotifier, TelegramNotifier>();
 builder.Services.AddSingleton<IncidentCandidateStore>();
 builder.Services.AddSingleton<TelegramWebhookHandler>();
+builder.Services.AddSingleton<IIncidentRepository, SupabaseIncidentRepository>();
 builder.Services.AddHostedService<RssPollingService>();
+builder.Services.AddHostedService<ApprovalProcessingService>();
 
 var app = builder.Build();
 
@@ -35,7 +37,12 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
     Results.Ok(new
     {
         telegram = new { telegram.Value.Enabled, telegram.Value.ChatId },
-        supabase = new { supabase.Value.ConnectionString is not null },
+        supabase = new
+        {
+            supabase.Value.ConnectionString is not null,
+            supabase.Value.DefaultPhotoUrl,
+            supabase.Value.DefaultStreet
+        },
         rss = new
         {
             rss.Value.FeedUrl,
@@ -76,6 +83,13 @@ public sealed class SupabaseOptions
     public const string SectionName = "Supabase";
 
     public string? ConnectionString { get; init; }
+
+    public string? DefaultPhotoUrl { get; init; }
+
+    public string? DefaultStreet { get; init; }
+
+    [Range(30, 86_400)]
+    public int PollIntervalSeconds { get; init; } = 60;
 }
 
 public sealed class RssOptions

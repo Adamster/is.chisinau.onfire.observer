@@ -34,5 +34,15 @@ public sealed class IncidentCandidateStore
         return false;
     }
 
+    public bool TryMarkPersisted(string candidateId)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            return pending.TryMarkPersisted();
+        }
+
+        return false;
+    }
+
     public IReadOnlyCollection<PendingIncident> GetAll() => _candidates.Values.ToList();
 }
