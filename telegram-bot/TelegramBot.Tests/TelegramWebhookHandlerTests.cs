@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Telegram.Bot.Types;
 using TelegramBot.Models;
 using TelegramBot.Services;
 using Xunit;
@@ -28,16 +29,16 @@ public sealed class TelegramWebhookHandlerTests
             rssOptions,
             supabaseOptions,
             NullLogger<TelegramWebhookHandler>.Instance);
-        var update = new TelegramUpdate
+        var update = new Update
         {
             UpdateId = 1,
-            CallbackQuery = new TelegramCallbackQuery
+            CallbackQuery = new CallbackQuery
             {
                 Data = "approve:item-1",
-                Message = new TelegramMessage
+                Message = new Message
                 {
                     MessageId = 42,
-                    Chat = new TelegramChat
+                    Chat = new Chat
                     {
                         Id = 123
                     }
@@ -72,16 +73,16 @@ public sealed class TelegramWebhookHandlerTests
             rssOptions,
             supabaseOptions,
             NullLogger<TelegramWebhookHandler>.Instance);
-        var update = new TelegramUpdate
+        var update = new Update
         {
             UpdateId = 1,
-            CallbackQuery = new TelegramCallbackQuery
+            CallbackQuery = new CallbackQuery
             {
                 Data = "approve:item-1",
-                Message = new TelegramMessage
+                Message = new Message
                 {
                     MessageId = 42,
-                    Chat = new TelegramChat
+                    Chat = new Chat
                     {
                         Id = 123
                     }
