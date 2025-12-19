@@ -58,17 +58,18 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
         }
     }));
 
-app.MapPost("/telegram/update", (
+app.MapPost("/telegram/update", async (
     [FromBody] Update update,
     TelegramWebhookHandler handler,
-    IOptions<TelegramBotOptions> options) =>
+    IOptions<TelegramBotOptions> options,
+    CancellationToken cancellationToken) =>
 {
     if (!options.Value.Enabled)
     {
         return Results.Ok(new { status = "disabled" });
     }
 
-    var handled = handler.HandleUpdate(update);
+    var handled = await handler.HandleUpdateAsync(update, cancellationToken);
     return Results.Ok(new { status = handled ? "ok" : "ignored" });
 });
 

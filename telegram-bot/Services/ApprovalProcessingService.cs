@@ -36,8 +36,21 @@ public sealed class ApprovalProcessingService : BackgroundService
 
                 foreach (var incident in approved)
                 {
-                    await _repository.AddIncidentAsync(incident.Candidate, stoppingToken);
-                    _store.TryMarkPersisted(incident.Candidate.Id);
+                    if (!_store.TryBeginPersisting(incident.Candidate.Id))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        await _repository.AddIncidentAsync(incident.Candidate, stoppingToken);
+                        _store.TryMarkPersisted(incident.Candidate.Id);
+                    }
+                    catch
+                    {
+                        _store.CancelPersisting(incident.Candidate.Id);
+                        throw;
+                    }
                 }
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)

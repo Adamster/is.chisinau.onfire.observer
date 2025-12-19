@@ -4,5 +4,5 @@ namespace TelegramBot.Services;
 
 public interface IIncidentRepository
 {
-    Task AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken);
+    Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken);
 }
