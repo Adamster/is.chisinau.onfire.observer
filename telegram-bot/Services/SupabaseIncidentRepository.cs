@@ -23,29 +23,35 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         _logger = logger;
     }
 
-    public async Task AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+    public async Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
     {
         if (!TryGetConnectionInfo(_options.CurrentValue, out var url, out var key))
         {
             _logger.LogWarning("Supabase connection string or service role key is not configured.");
-            return;
+            return null;
         }
 
+        var payload = await BuildPayloadAsync(candidate, cancellationToken);
+        var client = await GetClientAsync(url, key, cancellationToken);
+
+        await client.From<FireIncident>().Insert(payload, cancellationToken: cancellationToken);
+        _logger.LogInformation("Inserted incident row for {CandidateId}.", candidate.Id);
+        return payload;
+    }
+
+    private async Task<FireIncident> BuildPayloadAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+    {
         var when = candidate.PublishedAt ?? DateTimeOffset.UtcNow;
         var details = await _articleDetailsFetcher.FetchAsync(candidate, cancellationToken);
         var photoUrl = ResolvePhotoUrl(candidate, details);
         var street = ResolveStreet(candidate, details);
 
-        var client = await GetClientAsync(url, key, cancellationToken);
-        var payload = new FireIncident
+        return new FireIncident
         {
             Datetime = when.UtcDateTime,
             PhotoUrl = photoUrl,
             Street = street
         };
-
-        await client.From<FireIncident>().Insert(payload, cancellationToken: cancellationToken);
-        _logger.LogInformation("Inserted incident row for {CandidateId}.", candidate.Id);
     }
 
     private string ResolvePhotoUrl(RssItemCandidate candidate, ArticleDetails details)

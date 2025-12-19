@@ -10,13 +10,14 @@ namespace TelegramBot.Tests;
 public sealed class TelegramWebhookHandlerTests
 {
     [Fact]
-    public void HandleUpdate_UpdatesDecisionWhenAuthorized()
+    public async Task HandleUpdate_UpdatesDecisionWhenAuthorized()
     {
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
         Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
 
         var notifier = new StubTelegramNotifier();
+        var repository = new StubIncidentRepository();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "123"
@@ -27,6 +28,7 @@ public sealed class TelegramWebhookHandlerTests
         var handler = new TelegramWebhookHandler(
             store,
             notifier,
+            repository,
             options,
             rssOptions,
             supabaseOptions,
@@ -51,20 +53,21 @@ public sealed class TelegramWebhookHandlerTests
             }
         };
 
-        var handled = handler.HandleUpdate(update);
+        var handled = await handler.HandleUpdateAsync(update, CancellationToken.None);
 
         Assert.True(handled);
         Assert.Equal(ApprovalDecision.Approved, store.GetAll().Single().Decision);
     }
 
     [Fact]
-    public void HandleUpdate_IgnoresUnauthorizedChat()
+    public async Task HandleUpdate_IgnoresUnauthorizedChat()
     {
         var store = new IncidentCandidateStore();
         store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
         Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
 
         var notifier = new StubTelegramNotifier();
+        var repository = new StubIncidentRepository();
         var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
         {
             ChatId = "999"
@@ -75,6 +78,7 @@ public sealed class TelegramWebhookHandlerTests
         var handler = new TelegramWebhookHandler(
             store,
             notifier,
+            repository,
             options,
             rssOptions,
             supabaseOptions,
@@ -99,7 +103,7 @@ public sealed class TelegramWebhookHandlerTests
             }
         };
 
-        var handled = handler.HandleUpdate(update);
+        var handled = await handler.HandleUpdateAsync(update, CancellationToken.None);
 
         Assert.False(handled);
         Assert.Equal(ApprovalDecision.Pending, store.GetAll().Single().Decision);
@@ -112,5 +116,20 @@ public sealed class TelegramWebhookHandlerTests
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
+    }
+
+    private sealed class StubIncidentRepository : IIncidentRepository
+    {
+        public Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+        {
+            var incident = new FireIncident
+            {
+                Datetime = (candidate.PublishedAt ?? DateTimeOffset.UtcNow).UtcDateTime,
+                PhotoUrl = candidate.Link,
+                Street = candidate.Title
+            };
+
+            return Task.FromResult<FireIncident?>(incident);
+        }
     }
 }

@@ -15,6 +15,8 @@ public sealed class PendingIncident
 
     public bool IsPersisted { get; private set; }
 
+    public bool IsPersisting { get; private set; }
+
     public void MarkNotified(int messageId)
     {
         TelegramMessageId = messageId;
@@ -39,6 +41,26 @@ public sealed class PendingIncident
         }
 
         IsPersisted = true;
+        IsPersisting = false;
         return true;
+    }
+
+    public bool TryBeginPersisting()
+    {
+        if (IsPersisted || IsPersisting)
+        {
+            return false;
+        }
+
+        IsPersisting = true;
+        return true;
+    }
+
+    public void CancelPersisting()
+    {
+        if (!IsPersisted)
+        {
+            IsPersisting = false;
+        }
     }
 }

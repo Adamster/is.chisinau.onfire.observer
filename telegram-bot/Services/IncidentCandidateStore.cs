@@ -65,10 +65,31 @@ public sealed class IncidentCandidateStore
         return false;
     }
 
-    public bool TryGetCallbackToken(string candidateId, out string token) =>
+    public bool TryBeginPersisting(string candidateId)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            return pending.TryBeginPersisting();
+        }
+
+        return false;
+    }
+
+    public void CancelPersisting(string candidateId)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            pending.CancelPersisting();
+        }
+    }
+
+    public bool TryGetCandidate(string candidateId, out PendingIncident? pending) =>
+        _candidates.TryGetValue(candidateId, out pending);
+
+    public bool TryGetCallbackToken(string candidateId, out string? token) =>
         _candidateTokens.TryGetValue(candidateId, out token);
 
-    public bool TryGetCandidateId(string callbackToken, out string candidateId) =>
+    public bool TryGetCandidateId(string callbackToken, out string? candidateId) =>
         _callbackTokens.TryGetValue(callbackToken, out candidateId);
 
     public IReadOnlyCollection<PendingIncident> GetAll() => _candidates.Values.ToList();

@@ -8,6 +8,7 @@ public sealed class TelegramWebhookHandler
 {
     private readonly IncidentCandidateStore _store;
     private readonly ITelegramNotifier _notifier;
+    private readonly IIncidentRepository _repository;
     private readonly IOptionsMonitor<TelegramBotOptions> _options;
     private readonly IOptionsMonitor<RssOptions> _rssOptions;
     private readonly IOptionsMonitor<SupabaseOptions> _supabaseOptions;
@@ -16,6 +17,7 @@ public sealed class TelegramWebhookHandler
     public TelegramWebhookHandler(
         IncidentCandidateStore store,
         ITelegramNotifier notifier,
+        IIncidentRepository repository,
         IOptionsMonitor<TelegramBotOptions> options,
         IOptionsMonitor<RssOptions> rssOptions,
         IOptionsMonitor<SupabaseOptions> supabaseOptions,
@@ -23,15 +25,16 @@ public sealed class TelegramWebhookHandler
     {
         _store = store;
         _notifier = notifier;
+        _repository = repository;
         _options = options;
         _rssOptions = rssOptions;
         _supabaseOptions = supabaseOptions;
         _logger = logger;
     }
 
-    public bool HandleUpdate(Update update)
+    public async Task<bool> HandleUpdateAsync(Update update, CancellationToken cancellationToken)
     {
-        if (TryHandleStart(update))
+        if (await TryHandleStartAsync(update, cancellationToken))
         {
             return true;
         }
@@ -55,7 +58,7 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        if (!_store.TryGetCandidateId(callbackToken!, out var candidateId))
+        if (!_store.TryGetCandidateId(callbackToken!, out var candidateId) || string.IsNullOrWhiteSpace(candidateId))
         {
             _logger.LogWarning("Unable to resolve callback token: {CallbackToken}", callbackToken);
             return false;
@@ -70,11 +73,64 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
-        return true;
+        if (!_store.TryGetCandidate(candidateId, out var pending) || pending is null)
+        {
+            _logger.LogWarning("Candidate {CandidateId} could not be loaded after decision.", candidateId);
+            return false;
+        }
+
+        var chatId = callback.Message?.Chat?.Id.ToString();
+        if (string.IsNullOrWhiteSpace(chatId))
+        {
+            _logger.LogWarning("Unable to send response for candidate {CandidateId} due to missing chat id.", candidateId);
+            return false;
+        }
+
+        if (decision == ApprovalDecision.Rejected)
+        {
+            await _notifier.SendMessageAsync(
+                chatId,
+                "This article will be ignored and will not be considered.",
+                cancellationToken);
+            _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
+            return true;
+        }
+
+        if (!_store.TryBeginPersisting(candidateId))
+        {
+            await _notifier.SendMessageAsync(
+                chatId,
+                "This article is already being processed.",
+                cancellationToken);
+            return true;
+        }
+
+        try
+        {
+            var inserted = await _repository.AddIncidentAsync(pending.Candidate, cancellationToken);
+            _store.TryMarkPersisted(candidateId);
+
+            var response = inserted is null
+                ? "Supabase is not configured, so the approved article was not inserted."
+                : BuildApprovalResponse(inserted);
+
+            await _notifier.SendMessageAsync(chatId, response, cancellationToken);
+            _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _store.CancelPersisting(candidateId);
+            _logger.LogError(ex, "Failed to insert approved incident for {CandidateId}.", candidateId);
+            await _notifier.SendMessageAsync(
+                chatId,
+                "Failed to insert the approved article into Supabase. Please retry.",
+                cancellationToken);
+            return false;
+        }
     }
 
-    private bool TryHandleStart(Update update)
+    private async Task<bool> TryHandleStartAsync(Update update, CancellationToken cancellationToken)
     {
         var message = update.Message;
         if (message?.Text is null)
@@ -101,7 +157,7 @@ public sealed class TelegramWebhookHandler
         }
 
         var response = BuildConfigurationMessage();
-        _ = _notifier.SendMessageAsync(message.Chat?.Id.ToString() ?? "", response, CancellationToken.None);
+        await _notifier.SendMessageAsync(message.Chat?.Id.ToString() ?? "", response, cancellationToken);
         return true;
     }
 
@@ -119,6 +175,17 @@ public sealed class TelegramWebhookHandler
             $"RSS poll interval: {rss.PollIntervalSeconds}s",
             $"RSS keywords: {rss.Keywords.Count}",
             $"Supabase configured: {(hasSupabase ? "yes" : "no")}"
+        });
+    }
+
+    private static string BuildApprovalResponse(FireIncident inserted)
+    {
+        return string.Join(Environment.NewLine, new[]
+        {
+            "Approved and inserted into Supabase:",
+            $"Datetime (UTC): {inserted.Datetime:O}",
+            $"Street: {inserted.Street}",
+            $"Photo URL: {inserted.PhotoUrl}"
         });
     }
 

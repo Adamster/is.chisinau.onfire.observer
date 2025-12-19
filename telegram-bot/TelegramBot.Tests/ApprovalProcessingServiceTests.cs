@@ -40,10 +40,15 @@ public sealed class ApprovalProcessingServiceTests
 
         public Task WaitForInsertAsync() => _called.Task;
 
-        public Task AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+        public Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
         {
             _called.TrySetResult();
-            return Task.CompletedTask;
+            return Task.FromResult<FireIncident?>(new FireIncident
+            {
+                Datetime = DateTime.UtcNow,
+                PhotoUrl = "https://example.com/photo.jpg",
+                Street = "Test Street"
+            });
         }
     }
 }
