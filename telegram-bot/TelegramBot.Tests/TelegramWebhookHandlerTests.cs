@@ -116,6 +116,9 @@ public sealed class TelegramWebhookHandlerTests
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
+
+        public Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 
     private sealed class StubIncidentRepository : IIncidentRepository

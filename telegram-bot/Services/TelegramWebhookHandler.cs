@@ -49,18 +49,21 @@ public sealed class TelegramWebhookHandler
         if (!IsAuthorized(callback.Message?.Chat?.Id))
         {
             _logger.LogWarning("Ignoring callback from unauthorized chat.");
+            await AnswerCallbackAsync(callback, "Not authorized.", cancellationToken);
             return false;
         }
 
         if (!CallbackDataParser.TryParse(callback.Data, out var action, out var callbackToken))
         {
             _logger.LogWarning("Unable to parse callback data: {Data}", callback.Data);
+            await AnswerCallbackAsync(callback, "Unable to parse action.", cancellationToken);
             return false;
         }
 
         if (!_store.TryGetCandidateId(callbackToken!, out var candidateId) || string.IsNullOrWhiteSpace(candidateId))
         {
             _logger.LogWarning("Unable to resolve callback token: {CallbackToken}", callbackToken);
+            await AnswerCallbackAsync(callback, "This action has expired.", cancellationToken);
             return false;
         }
 
@@ -70,6 +73,7 @@ public sealed class TelegramWebhookHandler
         if (!updated)
         {
             _logger.LogWarning("Candidate decision could not be updated for {CandidateId}.", candidateId);
+            await AnswerCallbackAsync(callback, "Unable to update this item.", cancellationToken);
             return false;
         }
 
@@ -88,6 +92,7 @@ public sealed class TelegramWebhookHandler
 
         if (decision == ApprovalDecision.Rejected)
         {
+            await AnswerCallbackAsync(callback, "Rejected.", cancellationToken);
             await _notifier.SendMessageAsync(
                 chatId,
                 "This article will be ignored and will not be considered.",
@@ -98,12 +103,15 @@ public sealed class TelegramWebhookHandler
 
         if (!_store.TryBeginPersisting(candidateId))
         {
+            await AnswerCallbackAsync(callback, "Already processing.", cancellationToken);
             await _notifier.SendMessageAsync(
                 chatId,
                 "This article is already being processed.",
                 cancellationToken);
             return true;
         }
+
+        await AnswerCallbackAsync(callback, "Approved. Processing.", cancellationToken);
 
         try
         {
@@ -198,5 +206,15 @@ public sealed class TelegramWebhookHandler
         }
 
         return chatId?.ToString() == expectedChatId;
+    }
+
+    private Task AnswerCallbackAsync(CallbackQuery callback, string message, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(callback.Id))
+        {
+            return Task.CompletedTask;
+        }
+
+        return _notifier.AnswerCallbackAsync(callback.Id, message, cancellationToken);
     }
 }

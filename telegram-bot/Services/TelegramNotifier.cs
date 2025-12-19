@@ -68,6 +68,43 @@ public sealed class TelegramNotifier : ITelegramNotifier
             cancellationToken);
     }
 
+    public async Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(callbackQueryId))
+        {
+            _logger.LogWarning("Telegram callback query id is missing.");
+            return;
+        }
+
+        var config = _options.CurrentValue;
+        if (!config.Enabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(config.BotToken))
+        {
+            _logger.LogWarning("Telegram bot token is missing.");
+            return;
+        }
+
+        try
+        {
+            var client = new TelegramBotClient(config.BotToken);
+            var request = new AnswerCallbackQueryRequest
+            {
+                CallbackQueryId = callbackQueryId,
+                Text = string.IsNullOrWhiteSpace(message) ? null : message,
+                ShowAlert = false
+            };
+            await client.SendRequest(request, cancellationToken);
+        }
+        catch (Exception ex) when (ex is Telegram.Bot.Exceptions.ApiRequestException or TaskCanceledException)
+        {
+            _logger.LogWarning(ex, "Telegram answerCallbackQuery failed.");
+        }
+    }
+
     private async Task<int?> SendMessageAsync(
         ChatId chatId,
         string message,

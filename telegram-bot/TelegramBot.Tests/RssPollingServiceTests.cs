@@ -59,5 +59,8 @@ public sealed class RssPollingServiceTests
 
         public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
+
+        public Task AnswerCallbackAsync(string callbackQueryId, string message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }
