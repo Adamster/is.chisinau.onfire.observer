@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 using TelegramBot.Models;
 using TelegramBot.Services;
 using Xunit;
@@ -34,13 +35,16 @@ public sealed class TelegramWebhookHandlerTests
             UpdateId = 1,
             CallbackQuery = new CallbackQuery
             {
+                Id = "callback-1",
                 Data = "approve:item-1",
                 Message = new Message
                 {
                     MessageId = 42,
+                    Date = DateTime.UtcNow,
                     Chat = new Chat
                     {
-                        Id = 123
+                        Id = 123,
+                        Type = ChatType.Private
                     }
                 }
             }
@@ -78,13 +82,16 @@ public sealed class TelegramWebhookHandlerTests
             UpdateId = 1,
             CallbackQuery = new CallbackQuery
             {
+                Id = "callback-2",
                 Data = "approve:item-1",
                 Message = new Message
                 {
                     MessageId = 42,
+                    Date = DateTime.UtcNow,
                     Chat = new Chat
                     {
-                        Id = 123
+                        Id = 123,
+                        Type = ChatType.Private
                     }
                 }
             }
