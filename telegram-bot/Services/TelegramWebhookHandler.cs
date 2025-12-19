@@ -9,6 +9,7 @@ public sealed class TelegramWebhookHandler
     private readonly IncidentCandidateStore _store;
     private readonly ITelegramNotifier _notifier;
     private readonly IIncidentRepository _repository;
+    private readonly IArticleDetailsFetcher _articleDetailsFetcher;
     private readonly IOptionsMonitor<TelegramBotOptions> _options;
     private readonly IOptionsMonitor<RssOptions> _rssOptions;
     private readonly IOptionsMonitor<SupabaseOptions> _supabaseOptions;
@@ -18,6 +19,7 @@ public sealed class TelegramWebhookHandler
         IncidentCandidateStore store,
         ITelegramNotifier notifier,
         IIncidentRepository repository,
+        IArticleDetailsFetcher articleDetailsFetcher,
         IOptionsMonitor<TelegramBotOptions> options,
         IOptionsMonitor<RssOptions> rssOptions,
         IOptionsMonitor<SupabaseOptions> supabaseOptions,
@@ -26,6 +28,7 @@ public sealed class TelegramWebhookHandler
         _store = store;
         _notifier = notifier;
         _repository = repository;
+        _articleDetailsFetcher = articleDetailsFetcher;
         _options = options;
         _rssOptions = rssOptions;
         _supabaseOptions = supabaseOptions;
@@ -53,7 +56,7 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        if (!CallbackDataParser.TryParse(callback.Data, out var action, out var callbackToken))
+        if (!CallbackDataParser.TryParse(callback.Data, out var action, out var callbackToken, out var payload))
         {
             _logger.LogWarning("Unable to parse callback data: {Data}", callback.Data);
             await AnswerCallbackAsync(callback, "Unable to parse action.", showAlert: true, cancellationToken);
@@ -65,6 +68,11 @@ public sealed class TelegramWebhookHandler
             _logger.LogWarning("Unable to resolve callback token: {CallbackToken}", callbackToken);
             await AnswerCallbackAsync(callback, "This action has expired.", showAlert: true, cancellationToken);
             return false;
+        }
+
+        if (action == ApprovalAction.SelectStreet)
+        {
+            return await HandleStreetSelectionAsync(callback, candidateId, payload, cancellationToken);
         }
 
         var decision = action == ApprovalAction.Approve ? ApprovalDecision.Approved : ApprovalDecision.Rejected;
@@ -106,42 +114,26 @@ public sealed class TelegramWebhookHandler
             return true;
         }
 
-        if (!_store.TryBeginPersisting(candidateId))
+        var details = await _articleDetailsFetcher.FetchAsync(pending.Candidate, cancellationToken);
+        var streetOptions = BuildStreetOptions(details);
+
+        if (!_store.TrySetStreetOptions(candidateId, streetOptions))
         {
-            await AnswerCallbackAsync(callback, "Already processing.", showAlert: true, cancellationToken);
-            await _notifier.SendMessageAsync(
-                chatId,
-                "This article is already being processed.",
-                cancellationToken);
-            return true;
-        }
-
-        await AnswerCallbackAsync(callback, "Approved. Processing.", showAlert: true, cancellationToken);
-        await _notifier.SendMessageAsync(chatId, "Approved. Processing.", cancellationToken);
-
-        try
-        {
-            var inserted = await _repository.AddIncidentAsync(pending.Candidate, cancellationToken);
-            _store.TryMarkPersisted(candidateId);
-
-            var response = inserted is null
-                ? "Supabase is not configured, so the approved article was not inserted."
-                : BuildApprovalResponse(inserted);
-
-            await _notifier.SendMessageAsync(chatId, response, cancellationToken);
-            _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _store.CancelPersisting(candidateId);
-            _logger.LogError(ex, "Failed to insert approved incident for {CandidateId}.", candidateId);
-            await _notifier.SendMessageAsync(
-                chatId,
-                "Failed to insert the approved article into Supabase. Please retry.",
-                cancellationToken);
+            _logger.LogWarning("Unable to store street options for {CandidateId}.", candidateId);
+            await AnswerCallbackAsync(callback, "Unable to prepare street options.", showAlert: true, cancellationToken);
             return false;
         }
+
+        await AnswerCallbackAsync(callback, "Approved. Select a street.", showAlert: true, cancellationToken);
+        await _notifier.SendStreetSelectionAsync(
+            chatId,
+            "Select the street to insert for this incident:",
+            streetOptions,
+            callbackToken!,
+            cancellationToken);
+
+        _logger.LogInformation("Candidate {CandidateId} marked as {Decision}.", candidateId, decision);
+        return true;
     }
 
     private async Task<bool> TryHandleStartAsync(Update update, CancellationToken cancellationToken)
@@ -201,6 +193,22 @@ public sealed class TelegramWebhookHandler
             $"Street: {inserted.Street}",
             $"Photo URL: {inserted.PhotoUrl}"
         });
+    }
+
+    private static IReadOnlyList<string> BuildStreetOptions(ArticleDetails details)
+    {
+        var options = details.Streets
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            options.Add("(unknown)");
+        }
+
+        return options;
     }
 
     private bool IsAuthorized(long? chatId, long? userId)
@@ -278,5 +286,89 @@ public sealed class TelegramWebhookHandler
             string.Empty,
             $"{statusMarker} {decisionText}"
         });
+    }
+
+    private async Task<bool> HandleStreetSelectionAsync(
+        CallbackQuery callback,
+        string candidateId,
+        string? selection,
+        CancellationToken cancellationToken)
+    {
+        if (!_store.TryGetCandidate(candidateId, out var pending) || pending is null)
+        {
+            _logger.LogWarning("Candidate {CandidateId} could not be loaded for street selection.", candidateId);
+            await AnswerCallbackAsync(callback, "This action has expired.", showAlert: true, cancellationToken);
+            return false;
+        }
+
+        if (!int.TryParse(selection, out var index))
+        {
+            _logger.LogWarning("Invalid street selection payload: {Payload}", selection);
+            await AnswerCallbackAsync(callback, "Invalid street selection.", showAlert: true, cancellationToken);
+            return false;
+        }
+
+        if (!_store.TryGetStreetOptions(candidateId, out var options) || options is null || index < 0 || index >= options.Count)
+        {
+            _logger.LogWarning("Street selection out of range for {CandidateId}.", candidateId);
+            await AnswerCallbackAsync(callback, "Unknown street selection.", showAlert: true, cancellationToken);
+            return false;
+        }
+
+        var selectedStreet = options[index];
+        if (!_store.TrySelectStreet(candidateId, selectedStreet))
+        {
+            _logger.LogWarning("Street selection could not be updated for {CandidateId}.", candidateId);
+            await AnswerCallbackAsync(callback, "Street already selected.", showAlert: true, cancellationToken);
+            return false;
+        }
+
+        var chat = callback.Message?.Chat?.Id ?? callback.From?.Id;
+        if (!chat.HasValue)
+        {
+            _logger.LogWarning("Unable to send response for candidate {CandidateId} due to missing chat id.", candidateId);
+            return false;
+        }
+
+        await RemoveInlineKeyboardAsync(callback, cancellationToken);
+
+        var chatId = chat.Value.ToString();
+
+        if (!_store.TryBeginPersisting(candidateId))
+        {
+            await AnswerCallbackAsync(callback, "Already processing.", showAlert: true, cancellationToken);
+            await _notifier.SendMessageAsync(
+                chatId,
+                "This article is already being processed.",
+                cancellationToken);
+            return true;
+        }
+
+        await AnswerCallbackAsync(callback, $"Selected: {selectedStreet}", showAlert: true, cancellationToken);
+        await _notifier.SendMessageAsync(chatId, $"Selected street: {selectedStreet}. Processing.", cancellationToken);
+
+        try
+        {
+            var inserted = await _repository.AddIncidentAsync(pending.Candidate, selectedStreet, cancellationToken);
+            _store.TryMarkPersisted(candidateId);
+
+            var response = inserted is null
+                ? "Supabase is not configured, so the approved article was not inserted."
+                : BuildApprovalResponse(inserted);
+
+            await _notifier.SendMessageAsync(chatId, response, cancellationToken);
+            _logger.LogInformation("Candidate {CandidateId} inserted after street selection.", candidateId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _store.CancelPersisting(candidateId);
+            _logger.LogError(ex, "Failed to insert approved incident for {CandidateId}.", candidateId);
+            await _notifier.SendMessageAsync(
+                chatId,
+                "Failed to insert the approved article into Supabase. Please retry.",
+                cancellationToken);
+            return false;
+        }
     }
 }

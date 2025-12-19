@@ -17,6 +17,10 @@ public sealed class PendingIncident
 
     public bool IsPersisting { get; private set; }
 
+    public IReadOnlyList<string> StreetOptions { get; private set; } = Array.Empty<string>();
+
+    public string? SelectedStreet { get; private set; }
+
     public void MarkNotified(int messageId)
     {
         TelegramMessageId = messageId;
@@ -30,6 +34,38 @@ public sealed class PendingIncident
         }
 
         Decision = decision;
+        return true;
+    }
+
+    public bool TrySetStreetOptions(IReadOnlyList<string> options)
+    {
+        if (options is null || options.Count == 0)
+        {
+            return false;
+        }
+
+        StreetOptions = options;
+        return true;
+    }
+
+    public bool TrySelectStreet(string street)
+    {
+        if (Decision != ApprovalDecision.Approved)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(street))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SelectedStreet))
+        {
+            return false;
+        }
+
+        SelectedStreet = street;
         return true;
     }
 

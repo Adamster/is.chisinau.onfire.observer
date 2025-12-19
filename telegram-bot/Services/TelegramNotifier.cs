@@ -68,6 +68,46 @@ public sealed class TelegramNotifier : ITelegramNotifier
             cancellationToken);
     }
 
+    public async Task<int?> SendStreetSelectionAsync(
+        string chatId,
+        string prompt,
+        IReadOnlyList<string> streets,
+        string callbackToken,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(prompt))
+        {
+            _logger.LogWarning("Telegram chat id or prompt is missing for street selection.");
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(callbackToken))
+        {
+            _logger.LogWarning("Telegram callback token is missing for street selection.");
+            return null;
+        }
+
+        if (streets is null || streets.Count == 0)
+        {
+            _logger.LogWarning("Street selection requires at least one street option.");
+            return null;
+        }
+
+        var replyMarkup = new InlineKeyboardMarkup(
+            streets.Select((street, index) => new[]
+            {
+                InlineKeyboardButton.WithCallbackData(
+                    street,
+                    $"street:{callbackToken}:{index}")
+            }));
+
+        return await SendMessageAsync(
+            new ChatId(chatId),
+            Escape(prompt),
+            replyMarkup,
+            cancellationToken);
+    }
+
     public async Task AnswerCallbackAsync(
         string callbackQueryId,
         string message,

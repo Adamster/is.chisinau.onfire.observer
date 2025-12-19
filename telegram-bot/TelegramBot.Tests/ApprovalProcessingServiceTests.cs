@@ -14,6 +14,8 @@ public sealed class ApprovalProcessingServiceTests
         var candidate = new RssItemCandidate("id-1", "Fire", "https://example.com/1", DateTimeOffset.UtcNow, null);
         store.TryAdd(candidate);
         store.TrySetDecision("id-1", ApprovalDecision.Approved);
+        store.TrySetStreetOptions("id-1", new[] { "Test Street" });
+        store.TrySelectStreet("id-1", "Test Street");
 
         var repository = new StubIncidentRepository();
         var options = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions
@@ -40,14 +42,17 @@ public sealed class ApprovalProcessingServiceTests
 
         public Task WaitForInsertAsync() => _called.Task;
 
-        public Task<FireIncident?> AddIncidentAsync(RssItemCandidate candidate, CancellationToken cancellationToken)
+        public Task<FireIncident?> AddIncidentAsync(
+            RssItemCandidate candidate,
+            string? streetOverride,
+            CancellationToken cancellationToken)
         {
             _called.TrySetResult();
             return Task.FromResult<FireIncident?>(new FireIncident
             {
                 Datetime = DateTime.UtcNow,
                 PhotoUrl = "https://example.com/photo.jpg",
-                Street = "Test Street"
+                Street = streetOverride ?? "Test Street"
             });
         }
     }
