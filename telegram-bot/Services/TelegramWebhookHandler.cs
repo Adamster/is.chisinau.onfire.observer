@@ -6,6 +6,7 @@ namespace TelegramBot.Services;
 
 public sealed class TelegramWebhookHandler
 {
+    private const string ManualStreetOption = "Enter manually";
     private readonly IncidentCandidateStore _store;
     private readonly ITelegramNotifier _notifier;
     private readonly IIncidentRepository _repository;
@@ -38,6 +39,11 @@ public sealed class TelegramWebhookHandler
     public async Task<bool> HandleUpdateAsync(Update update, CancellationToken cancellationToken)
     {
         if (await TryHandleStartAsync(update, cancellationToken))
+        {
+            return true;
+        }
+
+        if (await TryHandleManualStreetAsync(update, cancellationToken))
         {
             return true;
         }
@@ -208,6 +214,11 @@ public sealed class TelegramWebhookHandler
             options.Add("(unknown)");
         }
 
+        if (!options.Contains(ManualStreetOption, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Add(ManualStreetOption);
+        }
+
         return options;
     }
 
@@ -316,12 +327,6 @@ public sealed class TelegramWebhookHandler
         }
 
         var selectedStreet = options[index];
-        if (!_store.TrySelectStreet(candidateId, selectedStreet))
-        {
-            _logger.LogWarning("Street selection could not be updated for {CandidateId}.", candidateId);
-            await AnswerCallbackAsync(callback, "Street already selected.", showAlert: true, cancellationToken);
-            return false;
-        }
 
         var chat = callback.Message?.Chat?.Id ?? callback.From?.Id;
         if (!chat.HasValue)
@@ -334,9 +339,102 @@ public sealed class TelegramWebhookHandler
 
         var chatId = chat.Value.ToString();
 
+        if (string.Equals(selectedStreet, ManualStreetOption, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!_store.TryBeginManualStreet(candidateId, chatId))
+            {
+                _logger.LogWarning("Manual street selection could not be started for {CandidateId}.", candidateId);
+                await AnswerCallbackAsync(callback, "Already awaiting a manual street.", showAlert: true, cancellationToken);
+                return false;
+            }
+
+            await AnswerCallbackAsync(callback, "Send the street name in chat.", showAlert: true, cancellationToken);
+            await _notifier.SendMessageAsync(chatId, "Please type the street name to use for this incident.", cancellationToken);
+            return true;
+        }
+
+        if (!_store.TrySelectStreet(candidateId, selectedStreet))
+        {
+            _logger.LogWarning("Street selection could not be updated for {CandidateId}.", candidateId);
+            await AnswerCallbackAsync(callback, "Street already selected.", showAlert: true, cancellationToken);
+            return false;
+        }
+
+        return await PersistSelectedStreetAsync(candidateId, pending, selectedStreet, chatId, cancellationToken, callback);
+    }
+
+    private async Task<bool> TryHandleManualStreetAsync(Update update, CancellationToken cancellationToken)
+    {
+        var message = update.Message;
+        if (message?.Text is null)
+        {
+            return false;
+        }
+
+        if (message.Text.StartsWith("/start", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!IsAuthorized(message.Chat?.Id, message.From?.Id))
+        {
+            _logger.LogWarning("Ignoring manual street entry from unauthorized chat.");
+            return false;
+        }
+
+        var chatId = (message.Chat?.Id ?? message.From?.Id)?.ToString();
+        if (string.IsNullOrWhiteSpace(chatId))
+        {
+            _logger.LogWarning("Manual street entry missing chat id.");
+            return false;
+        }
+
+        if (!_store.TryGetManualStreetRequest(chatId, out var candidateId) || string.IsNullOrWhiteSpace(candidateId))
+        {
+            return false;
+        }
+
+        if (!_store.TryGetCandidate(candidateId, out var pending) || pending is null)
+        {
+            _logger.LogWarning("Manual street entry candidate {CandidateId} could not be loaded.", candidateId);
+            _store.ClearManualStreetRequest(chatId, candidateId);
+            return false;
+        }
+
+        var selectedStreet = message.Text.Trim();
+        if (string.IsNullOrWhiteSpace(selectedStreet))
+        {
+            await _notifier.SendMessageAsync(chatId, "Please send a valid street name.", cancellationToken);
+            return true;
+        }
+
+        if (!_store.TrySelectManualStreet(candidateId, selectedStreet))
+        {
+            _logger.LogWarning("Manual street selection could not be updated for {CandidateId}.", candidateId);
+            await _notifier.SendMessageAsync(chatId, "Street already selected.", cancellationToken);
+            _store.ClearManualStreetRequest(chatId, candidateId);
+            return true;
+        }
+
+        _store.ClearManualStreetRequest(chatId, candidateId);
+        return await PersistSelectedStreetAsync(candidateId, pending, selectedStreet, chatId, cancellationToken);
+    }
+
+    private async Task<bool> PersistSelectedStreetAsync(
+        string candidateId,
+        PendingIncident pending,
+        string selectedStreet,
+        string chatId,
+        CancellationToken cancellationToken,
+        CallbackQuery? callback = null)
+    {
         if (!_store.TryBeginPersisting(candidateId))
         {
-            await AnswerCallbackAsync(callback, "Already processing.", showAlert: true, cancellationToken);
+            if (callback is not null)
+            {
+                await AnswerCallbackAsync(callback, "Already processing.", showAlert: true, cancellationToken);
+            }
+
             await _notifier.SendMessageAsync(
                 chatId,
                 "This article is already being processed.",
@@ -344,7 +442,11 @@ public sealed class TelegramWebhookHandler
             return true;
         }
 
-        await AnswerCallbackAsync(callback, $"Selected: {selectedStreet}", showAlert: true, cancellationToken);
+        if (callback is not null)
+        {
+            await AnswerCallbackAsync(callback, $"Selected: {selectedStreet}", showAlert: true, cancellationToken);
+        }
+
         await _notifier.SendMessageAsync(chatId, $"Selected street: {selectedStreet}. Processing.", cancellationToken);
 
         try

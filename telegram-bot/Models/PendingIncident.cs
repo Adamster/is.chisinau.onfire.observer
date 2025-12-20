@@ -21,6 +21,8 @@ public sealed class PendingIncident
 
     public string? SelectedStreet { get; private set; }
 
+    public bool IsAwaitingManualStreet { get; private set; }
+
     public void MarkNotified(int messageId)
     {
         TelegramMessageId = messageId;
@@ -67,6 +69,51 @@ public sealed class PendingIncident
 
         SelectedStreet = street;
         return true;
+    }
+
+    public bool TryBeginManualStreet()
+    {
+        if (Decision != ApprovalDecision.Approved)
+        {
+            return false;
+        }
+
+        if (IsAwaitingManualStreet || !string.IsNullOrWhiteSpace(SelectedStreet))
+        {
+            return false;
+        }
+
+        IsAwaitingManualStreet = true;
+        return true;
+    }
+
+    public bool TrySelectManualStreet(string street)
+    {
+        if (!IsAwaitingManualStreet)
+        {
+            return false;
+        }
+
+        if (!TrySelectStreet(street))
+        {
+            if (!string.IsNullOrWhiteSpace(SelectedStreet))
+            {
+                IsAwaitingManualStreet = false;
+            }
+
+            return false;
+        }
+
+        IsAwaitingManualStreet = false;
+        return true;
+    }
+
+    public void CancelManualStreet()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedStreet))
+        {
+            IsAwaitingManualStreet = false;
+        }
     }
 
     public bool TryMarkPersisted()
