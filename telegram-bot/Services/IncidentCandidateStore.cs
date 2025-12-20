@@ -10,6 +10,7 @@ public sealed class IncidentCandidateStore
     private readonly ConcurrentDictionary<string, PendingIncident> _candidates = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _candidateTokens = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, string> _callbackTokens = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _manualStreetRequests = new(StringComparer.OrdinalIgnoreCase);
 
     public bool TryAdd(RssItemCandidate candidate)
     {
@@ -73,6 +74,51 @@ public sealed class IncidentCandidateStore
         }
 
         return false;
+    }
+
+    public bool TryBeginManualStreet(string candidateId, string chatId)
+    {
+        if (string.IsNullOrWhiteSpace(chatId))
+        {
+            return false;
+        }
+
+        if (_candidates.TryGetValue(candidateId, out var pending) && pending.TryBeginManualStreet())
+        {
+            _manualStreetRequests[chatId] = candidateId;
+            return true;
+        }
+
+        return false;
+    }
+
+    public bool TrySelectManualStreet(string candidateId, string street)
+    {
+        if (_candidates.TryGetValue(candidateId, out var pending))
+        {
+            return pending.TrySelectManualStreet(street);
+        }
+
+        return false;
+    }
+
+    public bool TryGetManualStreetRequest(string chatId, out string? candidateId) =>
+        _manualStreetRequests.TryGetValue(chatId, out candidateId);
+
+    public void ClearManualStreetRequest(string chatId, string? candidateId = null)
+    {
+        if (string.IsNullOrWhiteSpace(chatId))
+        {
+            return;
+        }
+
+        if (candidateId is null)
+        {
+            _manualStreetRequests.TryRemove(chatId, out _);
+            return;
+        }
+
+        _manualStreetRequests.TryRemove(new KeyValuePair<string, string>(chatId, candidateId));
     }
 
     public bool TryMarkPersisted(string candidateId)
