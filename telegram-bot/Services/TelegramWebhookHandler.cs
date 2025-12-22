@@ -403,7 +403,7 @@ public sealed class TelegramWebhookHandler
 
     private async Task<bool> TryHandleManualStreetAsync(Update update, CancellationToken cancellationToken)
     {
-        var message = update.Message;
+        var message = update.Message ?? update.ChannelPost;
         if (message?.Text is null)
         {
             return false;
