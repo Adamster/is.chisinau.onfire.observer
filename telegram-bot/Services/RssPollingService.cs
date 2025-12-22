@@ -40,13 +40,16 @@ public sealed class RssPollingService : BackgroundService
                     if (_store.TryAdd(candidate))
                     {
                         added++;
-                        if (!_store.TryGetCallbackToken(candidate.Id, out var callbackToken))
+                        var hasCallbackToken = _store.TryGetCallbackToken(candidate.Id, out var callbackToken) &&
+                                               !string.IsNullOrWhiteSpace(callbackToken);
+                        if (!hasCallbackToken)
                         {
                             _logger.LogWarning("Unable to resolve callback token for {CandidateId}.", candidate.Id);
                             continue;
                         }
 
-                        var messageId = await _notifier.SendCandidateAsync(candidate, callbackToken, stoppingToken);
+                        var resolvedCallbackToken = callbackToken!;
+                        var messageId = await _notifier.SendCandidateAsync(candidate, resolvedCallbackToken, stoppingToken);
                         if (messageId.HasValue)
                         {
                             _store.TryMarkNotified(candidate.Id, messageId.Value);
