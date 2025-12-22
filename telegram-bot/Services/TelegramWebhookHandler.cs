@@ -214,7 +214,8 @@ public sealed class TelegramWebhookHandler
             options.Add("(unknown)");
         }
 
-        options.AddRange(BuildStreetVariants(options));
+        var variantSource = options.ToList();
+        options.AddRange(BuildStreetVariants(variantSource));
         options = options
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
