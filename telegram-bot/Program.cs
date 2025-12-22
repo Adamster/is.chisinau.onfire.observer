@@ -48,9 +48,7 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
         {
             hasConnectionString = !string.IsNullOrWhiteSpace(supabase.Value.ConnectionString),
             hasUrl = supabase.Value.Url is not null,
-            hasServiceRoleKey = supabase.Value.ServiceRoleKey is not null,
-            supabase.Value.DefaultPhotoUrl,
-            supabase.Value.DefaultStreet
+            hasServiceRoleKey = supabase.Value.ServiceRoleKey is not null
         },
         rss = new
         {
@@ -109,10 +107,6 @@ public sealed class SupabaseOptions
     public string? Url { get; set; }
 
     public string? ServiceRoleKey { get; set; }
-
-    public string? DefaultPhotoUrl { get; init; }
-
-    public string? DefaultStreet { get; init; }
 
     [Range(30, 86_400)]
     public int PollIntervalSeconds { get; init; } = 60;
