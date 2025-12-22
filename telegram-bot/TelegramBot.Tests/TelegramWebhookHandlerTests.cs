@@ -280,6 +280,115 @@ public sealed class TelegramWebhookHandlerTests
         Assert.Contains(notifier.Messages, message => message.Contains("Street: Manual Street"));
     }
 
+    [Fact]
+    public async Task HandleUpdate_ManualStreetSelectionAcceptsChannelPost()
+    {
+        var store = new IncidentCandidateStore();
+        store.TryAdd(new RssItemCandidate("item-2", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
+        Assert.True(store.TryGetCallbackToken("item-2", out var callbackToken));
+
+        var notifier = new StubTelegramNotifier();
+        var repository = new StubIncidentRepository();
+        var detailsFetcher = new StubArticleDetailsFetcher();
+        var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
+        {
+            ChatId = "-100"
+        });
+        var rssOptions = new TestOptionsMonitor<RssOptions>(new RssOptions());
+        var supabaseOptions = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions());
+
+        var handler = new TelegramWebhookHandler(
+            store,
+            notifier,
+            repository,
+            detailsFetcher,
+            options,
+            rssOptions,
+            supabaseOptions,
+            NullLogger<TelegramWebhookHandler>.Instance);
+
+        var approveUpdate = new Update
+        {
+            Id = 10,
+            CallbackQuery = new CallbackQuery
+            {
+                Id = "callback-channel-approve",
+                Data = $"approve:{callbackToken}",
+                Message = new Message
+                {
+                    Id = 50,
+                    Date = DateTime.UtcNow,
+                    Chat = new Chat
+                    {
+                        Id = -100,
+                        Type = ChatType.Channel
+                    }
+                }
+            }
+        };
+
+        var approved = await handler.HandleUpdateAsync(approveUpdate, CancellationToken.None);
+
+        Assert.True(store.TryGetStreetOptions("item-2", out var streetOptions));
+        var manualOptionIndex = -1;
+        for (var i = 0; i < streetOptions!.Count; i++)
+        {
+            if (string.Equals(streetOptions[i], "Enter manually", StringComparison.OrdinalIgnoreCase))
+            {
+                manualOptionIndex = i;
+                break;
+            }
+        }
+
+        Assert.True(manualOptionIndex >= 0);
+
+        var manualSelectUpdate = new Update
+        {
+            Id = 11,
+            CallbackQuery = new CallbackQuery
+            {
+                Id = "callback-channel-manual",
+                Data = $"street:{callbackToken}:{manualOptionIndex}",
+                Message = new Message
+                {
+                    Id = 51,
+                    Date = DateTime.UtcNow,
+                    Chat = new Chat
+                    {
+                        Id = -100,
+                        Type = ChatType.Channel
+                    }
+                }
+            }
+        };
+
+        var manualSelected = await handler.HandleUpdateAsync(manualSelectUpdate, CancellationToken.None);
+
+        var manualStreetUpdate = new Update
+        {
+            Id = 12,
+            ChannelPost = new Message
+            {
+                Id = 52,
+                Date = DateTime.UtcNow,
+                Chat = new Chat
+                {
+                    Id = -100,
+                    Type = ChatType.Channel
+                },
+                Text = "Channel Street"
+            }
+        };
+
+        var manualHandled = await handler.HandleUpdateAsync(manualStreetUpdate, CancellationToken.None);
+
+        Assert.True(approved);
+        Assert.True(manualSelected);
+        Assert.True(manualHandled);
+        Assert.Equal("Channel Street", repository.LastStreetOverride);
+        Assert.Equal(1, repository.CallCount);
+    }
+
     private sealed class StubTelegramNotifier : ITelegramNotifier
     {
         public List<string> Messages { get; } = new();
