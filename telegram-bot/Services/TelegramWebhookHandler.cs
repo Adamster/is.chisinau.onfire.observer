@@ -176,6 +176,10 @@ public sealed class TelegramWebhookHandler
     private string BuildConfigurationMessage()
     {
         var rss = _rssOptions.CurrentValue;
+        var feedUrls = rss.GetConfiguredFeedUrls();
+        var feedList = feedUrls.Count == 0
+            ? "(not set)"
+            : string.Join(", ", feedUrls);
         var supabase = _supabaseOptions.CurrentValue;
         var hasSupabase = !string.IsNullOrWhiteSpace(supabase.ConnectionString) ||
                           (!string.IsNullOrWhiteSpace(supabase.Url) && !string.IsNullOrWhiteSpace(supabase.ServiceRoleKey));
@@ -183,7 +187,7 @@ public sealed class TelegramWebhookHandler
         return string.Join(Environment.NewLine, new[]
         {
             "Configuration",
-            $"RSS feed: {rss.FeedUrl ?? "(not set)"}",
+            $"RSS feeds: {feedList}",
             $"RSS poll interval: {rss.PollIntervalSeconds}s",
             $"RSS keywords: {rss.Keywords.Count}",
             $"Supabase configured: {(hasSupabase ? "yes" : "no")}"

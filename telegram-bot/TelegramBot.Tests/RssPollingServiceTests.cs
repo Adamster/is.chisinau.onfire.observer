@@ -18,7 +18,7 @@ public sealed class RssPollingServiceTests
         var notifier = new StubTelegramNotifier();
         var options = new TestOptionsMonitor<RssOptions>(new RssOptions
         {
-            FeedUrl = "https://example.com/rss",
+            FeedUrls = new List<string> { "https://example.com/rss" },
             PollIntervalSeconds = 30
         });
 

@@ -20,23 +20,10 @@ public sealed class RssFetcher : IRssFetcher
 
     public async Task<IReadOnlyCollection<RssItemCandidate>> FetchCandidatesAsync(CancellationToken cancellationToken)
     {
-        var feedUrl = _options.CurrentValue.FeedUrl;
-        if (string.IsNullOrWhiteSpace(feedUrl))
+        var feedUrls = _options.CurrentValue.GetConfiguredFeedUrls();
+        if (feedUrls.Count == 0)
         {
-            _logger.LogWarning("RSS feed URL is not configured.");
-            return Array.Empty<RssItemCandidate>();
-        }
-
-        using var response = await _httpClient.GetAsync(feedUrl, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var xmlReader = XmlReader.Create(stream, new XmlReaderSettings { Async = true });
-        var feed = SyndicationFeed.Load(xmlReader);
-
-        if (feed is null)
-        {
-            _logger.LogWarning("RSS feed returned no items.");
+            _logger.LogWarning("RSS feed URLs are not configured.");
             return Array.Empty<RssItemCandidate>();
         }
 
@@ -46,31 +33,54 @@ public sealed class RssFetcher : IRssFetcher
             : keywords.Select(keyword => keyword.Trim()).Where(keyword => keyword.Length > 0).ToArray();
 
         var candidates = new List<RssItemCandidate>();
-        foreach (var item in feed.Items)
+        foreach (var feedUrl in feedUrls)
         {
-            var title = item.Title?.Text ?? string.Empty;
-            var summary = item.Summary?.Text;
-            var link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty;
-            var content = string.Join(' ', new[] { title, summary }.Where(value => !string.IsNullOrWhiteSpace(value)));
-
-            if (!MatchesKeywords(content, normalizedKeywords))
+            try
             {
-                continue;
-            }
+                using var response = await _httpClient.GetAsync(feedUrl, cancellationToken);
+                response.EnsureSuccessStatusCode();
 
-            var id = string.IsNullOrWhiteSpace(item.Id) ? link : item.Id;
-            if (string.IsNullOrWhiteSpace(id))
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                using var xmlReader = XmlReader.Create(stream, new XmlReaderSettings { Async = true });
+                var feed = SyndicationFeed.Load(xmlReader);
+
+                if (feed is null)
+                {
+                    _logger.LogWarning("RSS feed {FeedUrl} returned no items.", feedUrl);
+                    continue;
+                }
+
+                foreach (var item in feed.Items)
+                {
+                    var title = item.Title?.Text ?? string.Empty;
+                    var summary = item.Summary?.Text;
+                    var link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty;
+                    var content = string.Join(' ', new[] { title, summary }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+                    if (!MatchesKeywords(content, normalizedKeywords))
+                    {
+                        continue;
+                    }
+
+                    var id = string.IsNullOrWhiteSpace(item.Id) ? link : item.Id;
+                    if (string.IsNullOrWhiteSpace(id))
+                    {
+                        _logger.LogDebug("Skipping RSS item without id or link: {Title}", title);
+                        continue;
+                    }
+
+                    candidates.Add(new RssItemCandidate(
+                        id,
+                        title,
+                        link,
+                        item.PublishDate == DateTimeOffset.MinValue ? null : item.PublishDate,
+                        summary));
+                }
+            }
+            catch (Exception ex)
             {
-                _logger.LogDebug("Skipping RSS item without id or link: {Title}", title);
-                continue;
+                _logger.LogWarning(ex, "Failed to fetch RSS feed {FeedUrl}.", feedUrl);
             }
-
-            candidates.Add(new RssItemCandidate(
-                id,
-                title,
-                link,
-                item.PublishDate == DateTimeOffset.MinValue ? null : item.PublishDate,
-                summary));
         }
 
         return candidates;

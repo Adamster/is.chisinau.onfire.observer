@@ -52,7 +52,7 @@ app.MapGet("/config", (IOptions<TelegramBotOptions> telegram, IOptions<SupabaseO
         },
         rss = new
         {
-            rss.Value.FeedUrl,
+            rss.Value.FeedUrls,
             rss.Value.PollIntervalSeconds,
             keywordCount = rss.Value.Keywords.Count
         }
@@ -116,11 +116,18 @@ public sealed class RssOptions
 {
     public const string SectionName = "Rss";
 
-    public string? FeedUrl { get; init; }
+    public IReadOnlyList<string> FeedUrls { get; init; } = new List<string>();
 
     [Range(30, 86_400)]
     public int PollIntervalSeconds { get; init; } = 300;
 
     public IReadOnlyList<string> Keywords { get; init; } =
         new List<string> { "incendiu", "incendii", "fire", "пожар", "chișinău", "chisinau" };
+
+    public IReadOnlyList<string> GetConfiguredFeedUrls() =>
+        FeedUrls
+            .Select(url => url.Trim())
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 }
