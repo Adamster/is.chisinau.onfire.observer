@@ -217,13 +217,26 @@ public sealed class TelegramWebhookHandlerTests
 
         var approved = await handler.HandleUpdateAsync(approveUpdate, CancellationToken.None);
 
+        Assert.True(store.TryGetStreetOptions("item-1", out var streetOptions));
+        var manualOptionIndex = -1;
+        for (var i = 0; i < streetOptions!.Count; i++)
+        {
+            if (string.Equals(streetOptions[i], "Enter manually", StringComparison.OrdinalIgnoreCase))
+            {
+                manualOptionIndex = i;
+                break;
+            }
+        }
+
+        Assert.True(manualOptionIndex >= 0);
+
         var manualSelectUpdate = new Update
         {
             Id = 2,
             CallbackQuery = new CallbackQuery
             {
                 Id = "callback-manual",
-                Data = $"street:{callbackToken}:1",
+                Data = $"street:{callbackToken}:{manualOptionIndex}",
                 Message = new Message
                 {
                     Id = 43,
