@@ -20,6 +20,7 @@ These guidelines apply to all files under `telegram-bot/`.
 - Prefer `sealed` classes for options and simple services.
 - Use `ILogger<T>` for logging.
 - Use `HttpClient` via `IHttpClientFactory`.
+- For long `if` conditions, extract the boolean expression into a well-named variable before the `if` statement.
 
 ## API Conventions
 - Provide a lightweight health endpoint (`/healthz`).

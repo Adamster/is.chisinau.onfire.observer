@@ -168,13 +168,117 @@ public sealed class TelegramWebhookHandlerTests
         Assert.Equal(1, repository.CallCount);
     }
 
+    [Fact]
+    public async Task HandleUpdate_ManualStreetSelectionPersistsIncidentAndConfirms()
+    {
+        var store = new IncidentCandidateStore();
+        store.TryAdd(new RssItemCandidate("item-1", "Title", "https://example.com", DateTimeOffset.UtcNow, null));
+        Assert.True(store.TryGetCallbackToken("item-1", out var callbackToken));
+
+        var notifier = new StubTelegramNotifier();
+        var repository = new StubIncidentRepository();
+        var detailsFetcher = new StubArticleDetailsFetcher();
+        var options = new TestOptionsMonitor<TelegramBotOptions>(new TelegramBotOptions
+        {
+            ChatId = "123"
+        });
+        var rssOptions = new TestOptionsMonitor<RssOptions>(new RssOptions());
+        var supabaseOptions = new TestOptionsMonitor<SupabaseOptions>(new SupabaseOptions());
+
+        var handler = new TelegramWebhookHandler(
+            store,
+            notifier,
+            repository,
+            detailsFetcher,
+            options,
+            rssOptions,
+            supabaseOptions,
+            NullLogger<TelegramWebhookHandler>.Instance);
+
+        var approveUpdate = new Update
+        {
+            Id = 1,
+            CallbackQuery = new CallbackQuery
+            {
+                Id = "callback-approve",
+                Data = $"approve:{callbackToken}",
+                Message = new Message
+                {
+                    Id = 42,
+                    Date = DateTime.UtcNow,
+                    Chat = new Chat
+                    {
+                        Id = 123,
+                        Type = ChatType.Private
+                    }
+                }
+            }
+        };
+
+        var approved = await handler.HandleUpdateAsync(approveUpdate, CancellationToken.None);
+
+        var manualSelectUpdate = new Update
+        {
+            Id = 2,
+            CallbackQuery = new CallbackQuery
+            {
+                Id = "callback-manual",
+                Data = $"street:{callbackToken}:1",
+                Message = new Message
+                {
+                    Id = 43,
+                    Date = DateTime.UtcNow,
+                    Chat = new Chat
+                    {
+                        Id = 123,
+                        Type = ChatType.Private
+                    }
+                }
+            }
+        };
+
+        var manualSelected = await handler.HandleUpdateAsync(manualSelectUpdate, CancellationToken.None);
+
+        var manualStreetUpdate = new Update
+        {
+            Id = 3,
+            Message = new Message
+            {
+                Id = 44,
+                Date = DateTime.UtcNow,
+                Chat = new Chat
+                {
+                    Id = 123,
+                    Type = ChatType.Private
+                },
+                Text = "Manual Street"
+            }
+        };
+
+        var manualHandled = await handler.HandleUpdateAsync(manualStreetUpdate, CancellationToken.None);
+
+        Assert.True(approved);
+        Assert.True(manualSelected);
+        Assert.True(manualHandled);
+        Assert.Equal("Manual Street", repository.LastStreetOverride);
+        Assert.Equal(1, repository.CallCount);
+        Assert.Contains(notifier.Messages, message => message.Contains("Selected street: Manual Street."));
+        Assert.Contains(notifier.Messages, message => message.Contains("Approved and inserted into Supabase:"));
+        Assert.Contains(notifier.Messages, message => message.Contains("Street: Manual Street"));
+    }
+
     private sealed class StubTelegramNotifier : ITelegramNotifier
     {
+        public List<string> Messages { get; } = new();
+
         public Task<int?> SendCandidateAsync(RssItemCandidate candidate, string callbackToken, CancellationToken cancellationToken) =>
             Task.FromResult<int?>(null);
 
-        public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken) =>
-            Task.FromResult<int?>(null);
+        public Task<int?> SendMessageAsync(string chatId, string message, CancellationToken cancellationToken)
+        {
+            Messages.Add(message);
+            return Task.FromResult<int?>(null);
+        }
 
         public Task<int?> SendStreetSelectionAsync(
             string chatId,

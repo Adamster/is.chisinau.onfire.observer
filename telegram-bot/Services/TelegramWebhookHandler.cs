@@ -214,12 +214,49 @@ public sealed class TelegramWebhookHandler
             options.Add("(unknown)");
         }
 
+        options.AddRange(BuildStreetVariants(options));
+        options = options
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         if (!options.Contains(ManualStreetOption, StringComparer.OrdinalIgnoreCase))
         {
             options.Add(ManualStreetOption);
         }
 
         return options;
+    }
+
+    private static IEnumerable<string> BuildStreetVariants(IReadOnlyList<string> streets)
+    {
+        var templates = new[]
+        {
+            "по улице \"{0}\"",
+            "на улице \"{0}\"",
+            "по адресу улица \"{0}\"",
+            "по адресу: улица \"{0}\"",
+            "адрес: улица \"{0}\"",
+            "la strada \"{0}\"",
+            "pe strada \"{0}\"",
+            "la adresa: strada \"{0}\"",
+            "adresa: strada \"{0}\""
+        };
+
+        foreach (var street in streets)
+        {
+            var hasValidStreet = !string.IsNullOrWhiteSpace(street);
+            var isPlaceholder = string.Equals(street, "(unknown)", StringComparison.OrdinalIgnoreCase);
+            var isManualOption = string.Equals(street, ManualStreetOption, StringComparison.OrdinalIgnoreCase);
+            if (!hasValidStreet || isPlaceholder || isManualOption)
+            {
+                continue;
+            }
+
+            foreach (var template in templates)
+            {
+                yield return string.Format(template, street);
+            }
+        }
     }
 
     private bool IsAuthorized(long? chatId, long? userId)
@@ -382,14 +419,17 @@ public sealed class TelegramWebhookHandler
             return false;
         }
 
-        var chatId = (message.Chat?.Id ?? message.From?.Id)?.ToString();
+        var chatId = message.Chat?.Id.ToString();
         if (string.IsNullOrWhiteSpace(chatId))
         {
             _logger.LogWarning("Manual street entry missing chat id.");
             return false;
         }
 
-        if (!_store.TryGetManualStreetRequest(chatId, out var candidateId) || string.IsNullOrWhiteSpace(candidateId))
+        string? candidateId = null;
+        var hasChatId = !string.IsNullOrWhiteSpace(chatId);
+        var hasManualRequest = hasChatId && _store.TryGetManualStreetRequest(chatId, out candidateId);
+        if (!hasManualRequest || string.IsNullOrWhiteSpace(candidateId))
         {
             return false;
         }
