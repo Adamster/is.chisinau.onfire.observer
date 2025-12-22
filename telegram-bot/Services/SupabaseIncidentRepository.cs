@@ -80,11 +80,6 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
 
     private string ResolvePhotoUrl(RssItemCandidate candidate, ArticleDetails details)
     {
-        if (!string.IsNullOrWhiteSpace(_options.CurrentValue.DefaultPhotoUrl))
-        {
-            return _options.CurrentValue.DefaultPhotoUrl!;
-        }
-
         if (!string.IsNullOrWhiteSpace(details.PhotoUrl))
         {
             return details.PhotoUrl!;
@@ -98,11 +93,6 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         if (!string.IsNullOrWhiteSpace(streetOverride))
         {
             return streetOverride!;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_options.CurrentValue.DefaultStreet))
-        {
-            return _options.CurrentValue.DefaultStreet!;
         }
 
         if (!string.IsNullOrWhiteSpace(details.Street))
