@@ -189,7 +189,8 @@ public sealed class TelegramWebhookHandler
             "Configuration",
             $"RSS feeds: {feedList}",
             $"RSS poll interval: {rss.PollIntervalSeconds}s",
-            $"RSS keywords: {rss.Keywords.Count}",
+            $"RSS fire keywords: {rss.FireKeywords.Count}",
+            $"RSS city keywords: {rss.CityKeywords.Count}",
             $"Supabase configured: {(hasSupabase ? "yes" : "no")}"
         });
     }

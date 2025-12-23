@@ -27,10 +27,15 @@ public sealed class RssFetcher : IRssFetcher
             return Array.Empty<RssItemCandidate>();
         }
 
-        var keywords = _options.CurrentValue.Keywords;
-        var normalizedKeywords = keywords.Count == 0
+        var fireKeywords = _options.CurrentValue.FireKeywords;
+        var normalizedFireKeywords = fireKeywords.Count == 0
             ? Array.Empty<string>()
-            : keywords.Select(keyword => keyword.Trim()).Where(keyword => keyword.Length > 0).ToArray();
+            : fireKeywords.Select(keyword => keyword.Trim()).Where(keyword => keyword.Length > 0).ToArray();
+
+        var cityKeywords = _options.CurrentValue.CityKeywords;
+        var normalizedCityKeywords = cityKeywords.Count == 0
+            ? Array.Empty<string>()
+            : cityKeywords.Select(keyword => keyword.Trim()).Where(keyword => keyword.Length > 0).ToArray();
 
         var candidates = new List<RssItemCandidate>();
         foreach (var feedUrl in feedUrls)
@@ -57,7 +62,12 @@ public sealed class RssFetcher : IRssFetcher
                     var link = item.Links.FirstOrDefault()?.Uri?.ToString() ?? string.Empty;
                     var content = string.Join(' ', new[] { title, summary }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
-                    if (!MatchesKeywords(content, normalizedKeywords))
+                    if (!ContainsAnyKeyword(content, normalizedFireKeywords))
+                    {
+                        continue;
+                    }
+
+                    if (!ContainsAnyKeyword(content, normalizedCityKeywords))
                     {
                         continue;
                     }
@@ -86,11 +96,11 @@ public sealed class RssFetcher : IRssFetcher
         return candidates;
     }
 
-    private static bool MatchesKeywords(string content, IReadOnlyCollection<string> keywords)
+    private static bool ContainsAnyKeyword(string content, IReadOnlyCollection<string> keywords)
     {
         if (keywords.Count == 0)
         {
-            return true;
+            return false;
         }
 
         foreach (var keyword in keywords)
@@ -103,4 +113,5 @@ public sealed class RssFetcher : IRssFetcher
 
         return false;
     }
+
 }
