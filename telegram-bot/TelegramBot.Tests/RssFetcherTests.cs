@@ -21,7 +21,7 @@ public sealed class RssFetcherTests
                         <title>Fire in Chisinau</title>
                         <link>https://example.com/fire</link>
                         <guid>fire-1</guid>
-                        <description>Fire incident reported</description>
+                        <description>Fire incident reported in Chisinau</description>
                       </item>
                       <item>
                         <title>Sports update</title>
@@ -38,7 +38,8 @@ public sealed class RssFetcherTests
         var options = new TestOptionsMonitor<RssOptions>(new RssOptions
         {
             FeedUrls = new List<string> { "https://example.com/rss" },
-            Keywords = new List<string> { "fire" }
+            FireKeywords = new List<string> { "fire" },
+            CityKeywords = new List<string> { "chisinau" }
         });
 
         var fetcher = new RssFetcher(client, options, NullLogger<RssFetcher>.Instance);
@@ -46,6 +47,72 @@ public sealed class RssFetcherTests
 
         Assert.Single(results);
         Assert.Equal("fire-1", results.First().Id);
+    }
+
+    [Fact]
+    public async Task FetchCandidatesAsync_SkipsWhenCityKeywordMissing()
+    {
+        var rss = """
+                  <?xml version="1.0" encoding="utf-8"?>
+                  <rss version="2.0">
+                    <channel>
+                      <title>Test Feed</title>
+                      <item>
+                        <title>Fire incident</title>
+                        <link>https://example.com/fire</link>
+                        <guid>fire-1</guid>
+                        <description>Fire reported</description>
+                      </item>
+                    </channel>
+                  </rss>
+                  """;
+
+        var handler = new StubHttpMessageHandler(rss, HttpStatusCode.OK);
+        var client = new HttpClient(handler);
+        var options = new TestOptionsMonitor<RssOptions>(new RssOptions
+        {
+            FeedUrls = new List<string> { "https://example.com/rss" },
+            FireKeywords = new List<string> { "fire" },
+            CityKeywords = new List<string> { "chisinau" }
+        });
+
+        var fetcher = new RssFetcher(client, options, NullLogger<RssFetcher>.Instance);
+        var results = await fetcher.FetchCandidatesAsync(CancellationToken.None);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public async Task FetchCandidatesAsync_SkipsWhenFireKeywordMissing()
+    {
+        var rss = """
+                  <?xml version="1.0" encoding="utf-8"?>
+                  <rss version="2.0">
+                    <channel>
+                      <title>Test Feed</title>
+                      <item>
+                        <title>Incident in Chisinau</title>
+                        <link>https://example.com/incident</link>
+                        <guid>incident-1</guid>
+                        <description>Reported in Chisinau</description>
+                      </item>
+                    </channel>
+                  </rss>
+                  """;
+
+        var handler = new StubHttpMessageHandler(rss, HttpStatusCode.OK);
+        var client = new HttpClient(handler);
+        var options = new TestOptionsMonitor<RssOptions>(new RssOptions
+        {
+            FeedUrls = new List<string> { "https://example.com/rss" },
+            FireKeywords = new List<string> { "fire" },
+            CityKeywords = new List<string> { "chisinau" }
+        });
+
+        var fetcher = new RssFetcher(client, options, NullLogger<RssFetcher>.Instance);
+        var results = await fetcher.FetchCandidatesAsync(CancellationToken.None);
+
+        Assert.Empty(results);
     }
 
     [Fact]
@@ -73,10 +140,10 @@ public sealed class RssFetcherTests
                          <channel>
                            <title>Feed One</title>
                            <item>
-                             <title>Fire in town</title>
+                           <title>Fire in Chisinau</title>
                              <link>https://example.com/fire</link>
                              <guid>fire-1</guid>
-                             <description>Incident</description>
+                           <description>Incident in Chisinau</description>
                            </item>
                          </channel>
                        </rss>
@@ -88,10 +155,10 @@ public sealed class RssFetcherTests
                            <channel>
                              <title>Feed Two</title>
                              <item>
-                               <title>Another fire report</title>
+                           <title>Another fire report in Chisinau</title>
                                <link>https://example.com/fire-2</link>
                                <guid>fire-2</guid>
-                               <description>Smoke spotted</description>
+                           <description>Smoke spotted in Chisinau</description>
                              </item>
                            </channel>
                          </rss>
@@ -106,7 +173,8 @@ public sealed class RssFetcherTests
         var options = new TestOptionsMonitor<RssOptions>(new RssOptions
         {
             FeedUrls = new List<string> { "https://example.com/one", "https://example.com/two" },
-            Keywords = new List<string> { "fire" }
+            FireKeywords = new List<string> { "fire" },
+            CityKeywords = new List<string> { "chisinau" }
         });
 
         var fetcher = new RssFetcher(client, options, NullLogger<RssFetcher>.Instance);
