@@ -17,4 +17,7 @@ public sealed class FireIncident : BaseModel
 
     [Column("street")]
     public string Street { get; set; } = string.Empty;
+
+    [Column("source_url")]
+    public string SourceUrl { get; set; } = string.Empty;
 }

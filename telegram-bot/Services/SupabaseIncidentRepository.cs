@@ -74,7 +74,8 @@ public sealed class SupabaseIncidentRepository : IIncidentRepository
         {
             Datetime = when.UtcDateTime,
             PhotoUrl = photoUrl,
-            Street = street
+            Street = street,
+            SourceUrl = candidate.Link ?? string.Empty
         };
     }
 
